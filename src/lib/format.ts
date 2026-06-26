@@ -97,12 +97,12 @@ export function rankMap(rows: LeaderboardRow[]): Map<string, number> {
 }
 
 const SWEEP: Array<[number, number, number]> = [
-  [110, 231, 183],
-  [16, 185, 129],
-  [4, 120, 87],
+  [98, 201, 138],
+  [0, 144, 64],
+  [0, 102, 44],
 ]
 export function rankSweepColor(index: number, total: number): string {
-  if (total <= 1) return 'rgb(31,122,77)'
+  if (total <= 1) return 'rgb(0,128,55)'
   const t = Math.min(1, Math.max(0, index / (total - 1)))
   const seg = t < 0.5 ? 0 : 1
   const local = t < 0.5 ? t / 0.5 : (t - 0.5) / 0.5

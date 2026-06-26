@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { buildSchedule, type VolleyMatch } from './volley'
 import type {
   AuditEntry,
   LeaderboardRow,
@@ -31,6 +32,27 @@ export async function fetchLeaderboard(): Promise<LeaderboardRow[]> {
   const { data, error } = await supabase.from('leaderboard').select('*')
   if (error) throw error
   return data ?? []
+}
+
+export type DbHealth = {
+  ok: boolean
+  db_size_mb?: number
+  connections?: number
+  cache_hit_ratio?: number
+  xact_commit?: number
+  xact_rollback?: number
+  scores?: number
+  teams?: number
+  stations_active?: number
+  last_score?: string | null
+}
+
+export async function fetchDbHealth(): Promise<{ health: DbHealth; latencyMs: number }> {
+  const t0 = performance.now()
+  const { data, error } = await supabase.rpc('db_health')
+  const latencyMs = Math.round(performance.now() - t0)
+  if (error) throw error
+  return { health: data as DbHealth, latencyMs }
 }
 
 export async function getStationPublic(token: string) {
@@ -169,4 +191,42 @@ export async function adminSetScore(stationId: string, teamId: string, punkte: n
   try {
     await supabase.from('audit_log').insert({ station_id: stationId, team_id: teamId, aktion: 'admin_set', alt, neu: punkte, akteur })
   } catch {}
+}
+
+let adminPrefetch: Promise<[Team[], StationAdmin[], Score[]]> | null = null
+
+export function prefetchAdminData(): void {
+  adminPrefetch = Promise.all([fetchTeams(), fetchStationsAdmin(), fetchScores()])
+  adminPrefetch.catch(() => {})
+}
+
+export function takeAdminPrefetch(): Promise<[Team[], StationAdmin[], Score[]]> | null {
+  const p = adminPrefetch
+  adminPrefetch = null
+  return p
+}
+
+export async function fetchVolleyMatches(): Promise<VolleyMatch[]> {
+  const { data, error } = await supabase.from('volley_matches').select('*').order('sort')
+  if (error) throw error
+  return (data ?? []) as VolleyMatch[]
+}
+
+export async function generateVolleySchedule(): Promise<number> {
+  const { count } = await supabase.from('volley_matches').select('id', { count: 'exact', head: true })
+  if ((count ?? 0) > 0) return 0
+  const rows = buildSchedule().map((m) => ({ ...m, status: 'geplant' }))
+  const { error } = await supabase.from('volley_matches').insert(rows)
+  if (error) throw error
+  return rows.length
+}
+
+export async function setVolleyMatch(id: string, fields: Partial<Pick<VolleyMatch, 'score_a' | 'score_b' | 'status'>>): Promise<void> {
+  const { error } = await supabase.from('volley_matches').update(fields).eq('id', id)
+  if (error) throw error
+}
+
+export async function resetVolley(): Promise<void> {
+  const { error } = await supabase.from('volley_matches').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+  if (error) throw error
 }

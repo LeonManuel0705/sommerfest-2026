@@ -20,7 +20,7 @@ export function PrintSheet({ rows }: { rows: LeaderboardRow[] }) {
               Ernst-Haeckel-Gymnasium Werder
             </div>
             <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-              Sportfest 2026 — <span style={{ color: '#047857' }}>Ergebnisse</span>
+              Sommerfest 2026 — <span style={{ color: '#047857' }}>Ergebnisse</span>
             </div>
           </div>
           <div style={{ marginLeft: 'auto', textAlign: 'right', fontSize: 12, color: '#5a6b61' }}>{date}</div>
@@ -78,7 +78,7 @@ export function PrintSheet({ rows }: { rows: LeaderboardRow[] }) {
         </div>
 
         <div style={{ marginTop: 18, fontSize: 10, color: '#9aa69e', textAlign: 'center' }}>
-          Erstellt mit dem Sportfest-Live-System · Ernst-Haeckel-Gymnasium Werder (Havel)
+          Erstellt mit dem Sommerfest-Live-System · Ernst-Haeckel-Gymnasium Werder (Havel)
         </div>
       </div>
     </div>

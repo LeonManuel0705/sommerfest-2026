@@ -10,7 +10,7 @@ export function Brand({ className, to = '/' }: { className?: string; to?: string
         className="h-11 w-11 rounded-2xl object-contain bg-white/70 p-1 ring-1 ring-black/5 shadow-sm"
       />
       <span className="flex flex-col leading-none">
-        <span className="text-xl font-bold tracking-tight text-graphite">Sportfest</span>
+        <span className="text-xl font-bold tracking-tight text-graphite">Sommerfest</span>
         <span className="label-mono text-[9px] text-graphite-soft">EHG Werder</span>
       </span>
     </Link>

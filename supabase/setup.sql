@@ -1,5 +1,5 @@
 -- ============================================================================
---  SPORTFEST · KOMPLETT-SETUP (eine Datei, alles drin)
+--  SOMMERFEST 2026 · KOMPLETT-SETUP (eine Datei, alles drin)
 --  Im Supabase SQL-Editor einfügen und EINMAL auf "Run" klicken.
 --
 --  ⚠️  Dieses Skript setzt die Tabellen NEU auf und löscht dabei vorhandene
@@ -15,10 +15,11 @@ create extension if not exists pgcrypto;
 -- ---- Sauberer Reset (Reihenfolge wegen Fremdschlüsseln) --------------------
 drop view  if exists leaderboard;
 drop view  if exists stations_public;
-drop table if exists audit_log cascade;
-drop table if exists scores    cascade;
-drop table if exists stations  cascade;
-drop table if exists teams     cascade;
+drop table if exists audit_log      cascade;
+drop table if exists volley_matches cascade;
+drop table if exists scores         cascade;
+drop table if exists stations       cascade;
+drop table if exists teams          cascade;
 
 -- ----------------------------------------------------------------------------
 --  TABELLEN
@@ -190,6 +191,48 @@ grant execute on function station_login(text, text)                          to 
 grant execute on function get_station_public(text)                           to anon, authenticated;
 grant execute on function set_station_pin(uuid, text)                        to authenticated;
 
+create or replace function db_health()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare d pg_stat_database;
+begin
+  if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'not_authenticated'); end if;
+  select * into d from pg_stat_database where datname = current_database();
+  return jsonb_build_object(
+    'ok', true,
+    'db_size_mb', round(pg_database_size(current_database()) / 1048576.0, 1),
+    'connections', d.numbackends,
+    'cache_hit_ratio', round(100 * d.blks_hit::numeric / nullif(d.blks_hit + d.blks_read, 0), 1),
+    'xact_commit', d.xact_commit,
+    'xact_rollback', d.xact_rollback,
+    'scores', (select count(*) from scores),
+    'teams', (select count(*) from teams),
+    'stations_active', (select count(*) from stations where aktiv),
+    'last_score', (select max(updated_at) from scores)
+  );
+end; $$;
+revoke all on function db_health() from public;
+grant execute on function db_health() to authenticated;
+
+-- ----------------------------------------------------------------------------
+--  VOLLEYBALL-TURNIER
+-- ----------------------------------------------------------------------------
+create table volley_matches (
+  id         uuid primary key default gen_random_uuid(),
+  schiene    int  not null,
+  gruppe     text not null,
+  team_a     text not null,
+  team_b     text not null,
+  score_a    int,
+  score_b    int,
+  status     text not null default 'geplant',
+  sort       int  default 0,
+  created_at timestamptz default now()
+);
+alter table volley_matches enable row level security;
+create policy volley_select_all  on volley_matches for select using (true);
+create policy volley_write_admin on volley_matches for all
+  using (auth.uid() is not null) with check (auth.uid() is not null);
+
 -- ----------------------------------------------------------------------------
 --  REALTIME (idempotent – kein Fehler beim erneuten Ausführen)
 -- ----------------------------------------------------------------------------
@@ -201,10 +244,13 @@ begin
   if not exists (select 1 from pg_publication_tables
                  where pubname='supabase_realtime' and schemaname='public' and tablename='teams')
   then alter publication supabase_realtime add table teams; end if;
+  if not exists (select 1 from pg_publication_tables
+                 where pubname='supabase_realtime' and schemaname='public' and tablename='volley_matches')
+  then alter publication supabase_realtime add table volley_matches; end if;
 end $$;
 
 -- ----------------------------------------------------------------------------
---  BEISPIEL-DATEN (Klassen 5s–10s + Demo-Stationen, PIN 1234)
+--  DATEN: Klassen 5s–10s (22) + die 12 Wertungs-Stationen (ohne PIN)
 -- ----------------------------------------------------------------------------
 insert into teams (name, jahrgang, farbe, sort) values
   ('5s',  5, '#f43f5e',  55),
@@ -216,11 +262,18 @@ insert into teams (name, jahrgang, farbe, sort) values
 on conflict (name) do nothing;
 
 insert into stations (name, beschreibung, icon, gewicht, einheit, pin_hash, sort) values
-  ('Sackhüpfen',  'Staffel über 30m',     'rabbit',     1, 'Punkte',  crypt('1234', gen_salt('bf')), 1),
-  ('Tauziehen',   'Klasse gegen Klasse',  'dumbbell',   1, 'Punkte',  crypt('1234', gen_salt('bf')), 2),
-  ('Weitsprung',  'Bester Versuch zählt', 'footprints', 1, 'cm',      crypt('1234', gen_salt('bf')), 3),
-  ('Dosenwerfen', '3 Würfe pro Person',   'target',     1, 'Treffer', crypt('1234', gen_salt('bf')), 4),
-  ('Staffellauf', '4x100m',               'flag',       2, 'Punkte',  crypt('1234', gen_salt('bf')), 5)
+  ('Allgemeinwissen-Quiz', 'Quizfragen aus allen Bereichen',     'zap',        1, 'Punkte', null, 1),
+  ('Lehrkräfte-Quiz',      'Wie gut kennt ihr eure Lehrkräfte?', 'medal',      1, 'Punkte', null, 2),
+  ('Hobbyhorsing',         'Parcours auf dem Steckenpferd',      'wind',       1, 'Punkte', null, 3),
+  ('Wasserpong',           'Treffer im Becher zählen',           'waves',      1, 'Punkte', null, 4),
+  ('Just Dance',           'Tanz-Challenge nach Punkten',        'flame',      1, 'Punkte', null, 5),
+  ('Bobbycar-Racing',      'Rennen auf Zeit',                    'bike',       1, 'Punkte', null, 6),
+  ('Stadt, Land, Fluss',   'Begriffe pro Runde',                 'flag',       1, 'Punkte', null, 7),
+  ('Pantomime',            'Begriffe vorspielen & erraten',      'sparkles',   1, 'Punkte', null, 8),
+  ('Sackhüpfen',           'Staffel im Sack',                    'rabbit',     1, 'Punkte', null, 9),
+  ('Laufen',               'Lauf-Wettbewerb',                    'footprints', 1, 'Punkte', null, 10),
+  ('Fotos',                'Kreativste Klassen-Fotos',           'target',     1, 'Punkte', null, 11),
+  ('Volleyball-Turnier',   'Großes Finale in der Halle',         'goal',       1, 'Punkte', null, 12)
 on conflict (name) do nothing;
 
 -- Fertig! ✅  Du solltest unten "Success. No rows returned" sehen.

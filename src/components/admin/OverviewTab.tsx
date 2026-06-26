@@ -7,7 +7,7 @@ import { StationIcon } from '@/components/icons'
 import { exportMatrixCSV, exportResultsCSV } from '@/lib/exporters'
 import { PrintSheet } from '@/components/PrintSheet'
 import { CertificateSheet, type Cert } from '@/components/CertificateSheet'
-import { computeLeaderboard, fmt, rankMap } from '@/lib/format'
+import { computeLeaderboard, cx, fmt, rankMap } from '@/lib/format'
 
 const MEDAL3 = ['#d4af37', '#a7adb5', '#c08457']
 const PLATZ = ['1. Platz', '2. Platz', '3. Platz']
@@ -26,7 +26,16 @@ export function OverviewTab({
   reload: () => void
 }) {
   const [map, setMap] = useState<Record<string, number>>({})
+  const [flash, setFlash] = useState<Record<string, number>>({})
   const [printMode, setPrintMode] = useState<PrintMode | null>(null)
+
+  const focusCell = (ti: number, si: number) => {
+    const el = document.getElementById(`cell-${ti}-${si}`) as HTMLInputElement | null
+    if (el) {
+      el.focus()
+      el.select()
+    }
+  }
 
   useEffect(() => {
     setMap(Object.fromEntries(scores.map((s) => [`${s.station_id}:${s.team_id}`, s.punkte])))
@@ -65,7 +74,7 @@ export function OverviewTab({
       lb.slice(0, 3).map((r, i) => ({
         seal: String(i + 1),
         title: PLATZ[i],
-        context: 'Schulwertung · Sportfest 2026',
+        context: 'Schulwertung · Sommerfest 2026',
         name: r.name,
         points: r.gesamt,
         accent: MEDAL3[i],
@@ -86,7 +95,7 @@ export function OverviewTab({
       .map(([jg, r]) => ({
         seal: '★',
         title: 'Jahrgangsbeste Klasse',
-        context: `Jahrgangsstufe ${jg} · Sportfest 2026`,
+        context: `Jahrgangsstufe ${jg} · Sommerfest 2026`,
         name: r.name,
         points: r.gesamt,
         accent: '#047857',
@@ -102,6 +111,12 @@ export function OverviewTab({
     setMap((m) => ({ ...m, [key]: parsed }))
     try {
       await adminSetScore(stationId, teamId, parsed)
+      setFlash((f) => ({ ...f, [key]: (f[key] ?? 0) + 1 }))
+      window.setTimeout(() => setFlash((f) => {
+        const n = { ...f }
+        delete n[key]
+        return n
+      }), 900)
     } catch {
       reload()
     }
@@ -127,7 +142,7 @@ export function OverviewTab({
         </Button>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl glass-solid">
+      <div className="overflow-x-auto rounded-2xl border border-graphite/[0.08] bg-white/40 shadow-card">
         <table className="min-w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-graphite/10">
@@ -142,23 +157,35 @@ export function OverviewTab({
             </tr>
           </thead>
           <tbody>
-            {teams.map((team) => (
+            {teams.map((team, ti) => (
               <tr key={team.id} className="border-b border-graphite/8 last:border-0 hover:bg-graphite/[0.02]">
                 <td className="sticky left-0 z-10 bg-paper/85 px-3 py-1.5 font-bold backdrop-blur">
                   <span className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: team.farbe }} />
                   {team.name}
                 </td>
-                {stations.map((s) => {
+                {stations.map((s, si) => {
                   const key = `${s.id}:${team.id}`
                   return (
                     <td key={s.id} className="px-1 py-1 text-center">
                       <input
+                        id={`cell-${ti}-${si}`}
                         inputMode="decimal"
                         defaultValue={map[key] ?? ''}
                         key={`${key}:${map[key] ?? ''}`}
                         onBlur={(e) => commit(s.id, team.id, e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-                        className="w-14 rounded-lg bg-graphite/[0.04] px-1 py-1.5 text-center tabular outline-none focus:bg-white focus:ring-2 focus:ring-moss-400"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                            e.preventDefault()
+                            focusCell(ti + 1, si)
+                          } else if (e.key === 'ArrowUp') {
+                            e.preventDefault()
+                            focusCell(ti - 1, si)
+                          }
+                        }}
+                        className={cx(
+                          'w-14 rounded-lg px-1 py-1.5 text-center tabular outline-none transition-colors duration-300 focus:bg-white focus:ring-2 focus:ring-moss-400',
+                          flash[key] ? 'bg-moss-500/30 ring-2 ring-moss-500' : 'bg-graphite/[0.04]',
+                        )}
                       />
                     </td>
                   )

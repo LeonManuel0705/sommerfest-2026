@@ -28,7 +28,7 @@ export function CertificateSheet({ certs }: { certs: Cert[] }) {
             WebkitPrintColorAdjust: 'exact',
             boxSizing: 'border-box',
             width: '100%',
-            height: '100vh',
+            height: '296mm',
             overflow: 'hidden',
             padding: '6mm',
             fontFamily: 'var(--font-sans)',
@@ -73,9 +73,9 @@ export function CertificateSheet({ certs }: { certs: Cert[] }) {
                 <Sign label="Schulleitung" />
                 <div style={{ textAlign: 'center', fontSize: 13, color: '#7a8a80' }}>
                   Werder (Havel), {date}
-                  <div style={{ marginTop: 4, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#9aa69e' }}>Sportfest 2026</div>
+                  <div style={{ marginTop: 4, fontSize: 11, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#9aa69e' }}>Sommerfest 2026</div>
                 </div>
-                <Sign label="Sportfest-Orga" />
+                <Sign label="Sommerfest-Orga" />
               </div>
             </div>
           </div>

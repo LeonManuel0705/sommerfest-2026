@@ -4,7 +4,6 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Crown, Home, Maximize2, Minimize2 } from 'lucide-react'
 import { useLiveData } from '@/lib/useLiveData'
 import { FireBars } from '@/components/FireBars'
-import { InkBackground } from '@/components/InkBackground'
 import { ConfettiBurst } from '@/components/ConfettiBurst'
 import { computeJahrgangWertung } from '@/lib/format'
 
@@ -55,8 +54,7 @@ export default function Beamer() {
   const rows = isJg ? jahrgang : shown
 
   return (
-    <div className="relative min-h-dvh px-10 py-8">
-      <InkBackground />
+    <div className="relative min-h-dvh bg-paper px-10 py-8">
       <ConfettiBurst fireKey={flash} />
 
       <AnimatePresence>
@@ -93,9 +91,9 @@ export default function Beamer() {
 
       <header className="mb-8 flex items-center justify-between">
         <div>
-          <div className="eyebrow text-sm text-moss-600">Ernst-Haeckel-Gymnasium · Sportfest</div>
-          <div className="text-5xl font-bold tracking-tight text-graphite">
-            Live <span className="text-gradient">Scoreboard</span>
+          <div className="eyebrow text-sm text-moss-600">Ernst-Haeckel-Gymnasium · Sommerfest</div>
+          <div className="font-display text-6xl text-graphite">
+            Live <span className="text-moss-600">Scoreboard</span>
           </div>
           <AnimatePresence mode="wait">
             <motion.div
