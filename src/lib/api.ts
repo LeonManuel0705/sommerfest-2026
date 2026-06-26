@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { buildSchedule, type VolleyMatch } from './volley'
+import { buildSchedule, computeFinalists, FINALS, VOLLEY_SCHIENEN, type VolleyMatch } from './volley'
 import type {
   AuditEntry,
   LeaderboardRow,
@@ -215,18 +215,78 @@ export async function fetchVolleyMatches(): Promise<VolleyMatch[]> {
 export async function generateVolleySchedule(): Promise<number> {
   const { count } = await supabase.from('volley_matches').select('id', { count: 'exact', head: true })
   if ((count ?? 0) > 0) return 0
-  const rows = buildSchedule().map((m) => ({ ...m, status: 'geplant' }))
+  const rows = buildSchedule()
   const { error } = await supabase.from('volley_matches').insert(rows)
   if (error) throw error
   return rows.length
 }
 
-export async function setVolleyMatch(id: string, fields: Partial<Pick<VolleyMatch, 'score_a' | 'score_b' | 'status'>>): Promise<void> {
+export async function setVolleyMatch(
+  id: string,
+  fields: Partial<Pick<VolleyMatch, 'score_a' | 'score_b' | 'status' | 'team_a' | 'team_b'>>,
+): Promise<void> {
   const { error } = await supabase.from('volley_matches').update(fields).eq('id', id)
   if (error) throw error
+}
+
+export async function fillVolleyFinals(matches: VolleyMatch[]): Promise<void> {
+  for (const s of VOLLEY_SCHIENEN) {
+    const fin = computeFinalists(s.schiene, matches)
+    for (let i = 0; i < FINALS.length; i++) {
+      const row = matches.find((m) => m.phase === 'final' && m.schiene === s.schiene && m.platz === FINALS[i].platz)
+      if (!row || !fin[i].a || !fin[i].b) continue
+      const { error } = await supabase.from('volley_matches').update({ team_a: fin[i].a, team_b: fin[i].b }).eq('id', row.id)
+      if (error) throw error
+    }
+  }
 }
 
 export async function resetVolley(): Promise<void> {
   const { error } = await supabase.from('volley_matches').delete().neq('id', '00000000-0000-0000-0000-000000000000')
   if (error) throw error
+}
+
+export async function fetchVolleyStation(): Promise<{ id: string; token: string; hasPin: boolean } | null> {
+  const { data, error } = await supabase.from('stations').select('id, token, pin_hash').eq('name', 'Volleyball-Turnier').maybeSingle()
+  if (error) throw error
+  if (!data) return null
+  return { id: data.id as string, token: data.token as string, hasPin: !!data.pin_hash }
+}
+
+export async function volleyLogin(token: string, pin: string) {
+  const { data, error } = await supabase.rpc('volley_login', { p_token: token, p_pin: pin })
+  if (error) throw error
+  return data as { ok: boolean; name?: string; error?: string }
+}
+
+export async function volleyLeaderSetMatch(
+  token: string,
+  pin: string,
+  id: string,
+  scoreA: number | null,
+  scoreB: number | null,
+  status: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('volley_set_match', {
+    p_token: token,
+    p_pin: pin,
+    p_id: id,
+    p_score_a: scoreA,
+    p_score_b: scoreB,
+    p_status: status,
+  })
+  if (error) throw error
+  return data as { ok: boolean; error?: string }
+}
+
+export async function volleyLeaderSetTeams(
+  token: string,
+  pin: string,
+  id: string,
+  teamA: string,
+  teamB: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('volley_set_teams', { p_token: token, p_pin: pin, p_id: id, p_team_a: teamA, p_team_b: teamB })
+  if (error) throw error
+  return data as { ok: boolean; error?: string }
 }

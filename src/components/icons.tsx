@@ -1,5 +1,6 @@
 import {
   Bike,
+  CupSoda,
   Dumbbell,
   Flag,
   Flame,
@@ -12,6 +13,7 @@ import {
   Target,
   Timer,
   Trophy,
+  Utensils,
   Waves,
   Wind,
   Zap,
@@ -187,6 +189,8 @@ const STATION_MAP: Record<string, LucideIcon> = {
   wind: Wind,
   goal: Goal,
   sparkles: Sparkles,
+  utensils: Utensils,
+  'cup-soda': CupSoda,
 }
 
 export const STATION_ICON_NAMES = Object.keys(STATION_MAP)

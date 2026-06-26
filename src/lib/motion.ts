@@ -20,3 +20,9 @@ export const pop: Variants = {
 
 export const tap = { scale: 0.96 }
 export const hover = { scale: 1.03 }
+
+export const pageVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { duration: 0.42, ease: [0.22, 0.61, 0.36, 1] } },
+  exit: { opacity: 0, transition: { duration: 0.22, ease: 'easeIn' } },
+}

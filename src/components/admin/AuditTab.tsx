@@ -37,7 +37,7 @@ export function AuditTab({ teams, stations }: { teams: Team[]; stations: Station
         <div className="space-y-1.5">
           {entries.map((e) => (
             <GlassCard key={e.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-              <span className="w-28 shrink-0 text-xs text-graphite-soft/70">
+              <span className="w-20 sm:w-28 shrink-0 text-xs text-graphite-soft/70">
                 {new Date(e.created_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
               </span>
               <span className="flex flex-1 flex-wrap items-center gap-1">
@@ -50,7 +50,7 @@ export function AuditTab({ teams, stations }: { teams: Team[]; stations: Station
                   <b className="tabular text-moss-700">{fmt(e.neu ?? 0)}</b>
                 </span>
               </span>
-              <span className="max-w-[40%] truncate text-xs font-semibold text-graphite-soft/70" title={e.akteur ?? ''}>
+              <span className="max-w-[30%] sm:max-w-[40%] truncate text-xs font-semibold text-graphite-soft/70" title={e.akteur ?? ''}>
                 {e.akteur ?? 'unbekannt'}
               </span>
             </GlassCard>

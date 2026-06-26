@@ -9,20 +9,24 @@ export default function QR() {
   }, [])
 
   return (
-    <div className="grid min-h-dvh place-items-center bg-white p-8 text-center">
-      <div className="flex flex-col items-center">
-        <img src="/ehg-logo.png" alt="" className="h-16 w-16 rounded-2xl bg-white object-contain p-1 ring-1 ring-black/5" />
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-white px-5 py-8 text-center sm:px-8">
+      <div className="w-full max-w-md">
+        <img src="/ehg-logo.png" alt="" className="mx-auto h-16 w-16 rounded-2xl bg-white object-contain p-1 ring-1 ring-black/5" />
         <p className="mt-4 label-mono text-xs text-moss-600">Ernst-Haeckel-Gymnasium · 7. Juli 2026</p>
-        <h1 className="mt-2 font-display text-5xl text-graphite sm:text-6xl">
+        <h1 className="mt-2 font-display text-4xl text-graphite sm:text-6xl">
           Sommerfest <span className="text-moss-600">2026</span>
         </h1>
-        <p className="mt-3 text-xl text-graphite-soft">Scanne den Code für den Live-Punktestand</p>
+        <p className="mt-3 text-lg text-graphite-soft sm:text-xl">Scanne den Code für den Live-Punktestand</p>
 
-        <div className="mt-8 rounded-[2rem] bg-white p-7 shadow-card ring-1 ring-black/10">
-          {url && <QRCodeSVG value={url} size={300} level="M" fgColor="#101828" bgColor="#ffffff" />}
+        <div className="mx-auto mt-8 w-fit rounded-[2rem] bg-white p-5 shadow-card ring-1 ring-black/10 sm:p-7">
+          {url && (
+            <div className="w-[min(280px,72vw)]">
+              <QRCodeSVG value={url} size={256} level="M" fgColor="#101828" bgColor="#ffffff" className="h-auto w-full" />
+            </div>
+          )}
         </div>
 
-        <p className="mt-5 text-base font-semibold text-graphite">{url.replace(/^https?:\/\//, '')}</p>
+        <p className="mt-5 break-all text-base font-semibold text-graphite">{url.replace(/^https?:\/\//, '')}</p>
 
         <button
           onClick={() => window.print()}

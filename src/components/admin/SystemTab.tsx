@@ -78,7 +78,7 @@ export function SystemTab() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <span
             className={cx(
@@ -88,7 +88,7 @@ export function SystemTab() {
           >
             <Activity className="h-5 w-5" />
           </span>
-          <div>
+          <div className="min-w-0">
             <div className="font-bold text-graphite">
               {error ? 'Keine Verbindung zur Datenbank' : status === 'gut' ? 'Datenbank läuft normal' : status === 'okay' ? 'Datenbank antwortet etwas träge' : 'Datenbank reagiert langsam'}
             </div>

@@ -92,7 +92,7 @@ export function TeamsTab({ teams, reload }: { teams: Team[]; reload: () => void 
                 type="color"
                 value={t.farbe}
                 onChange={(e) => patch(t.id, { farbe: e.target.value })}
-                className="h-9 w-9 shrink-0 cursor-pointer rounded-lg border-0 bg-transparent"
+                className="h-10 w-10 shrink-0 cursor-pointer rounded-lg border-0 bg-transparent"
                 title="Farbe"
               />
               <input
@@ -105,10 +105,10 @@ export function TeamsTab({ teams, reload }: { teams: Team[]; reload: () => void 
                 type="number"
                 value={t.jahrgang ?? ''}
                 onChange={(e) => patch(t.id, { jahrgang: e.target.value ? Number(e.target.value) : null })}
-                className="w-14 rounded-lg bg-graphite/[0.05] px-2 py-1 text-center text-sm font-semibold outline-none focus:bg-white"
+                className="w-16 rounded-lg bg-graphite/[0.05] px-2 py-1 text-center text-base font-semibold outline-none focus:bg-white"
                 title="Jahrgang"
               />
-              <button onClick={() => remove(t.id)} className="grid h-8 w-8 place-items-center rounded-lg text-graphite-soft/50 hover:bg-crimson-500/10 hover:text-crimson-600" title="Löschen">
+              <button onClick={() => remove(t.id)} className="grid h-11 w-11 place-items-center rounded-lg text-graphite-soft/50 hover:bg-crimson-500/10 hover:text-crimson-600" title="Löschen">
                 <Trash2 className="h-4 w-4" />
               </button>
             </GlassCard>

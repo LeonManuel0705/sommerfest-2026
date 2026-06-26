@@ -10,16 +10,35 @@ const squashEase = [0.33, 0, 0.17, 1] as const
 
 type Pulse = { key: number; dir: 1 | -1; delta: number }
 
+function niceStep(raw: number) {
+  const exp = Math.floor(Math.log10(raw))
+  const base = Math.pow(10, exp)
+  const m = raw / base
+  return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * base
+}
+
 export function FireBars({ rows, big = false, chartH }: { rows: LeaderboardRow[]; big?: boolean; chartH?: number }) {
   const ranks = rankMap(rows)
   const total = rows.length
   const max = Math.max(1, ...rows.map((r) => r.gesamt))
   const H = chartH ?? (big ? 340 : 220)
   const labelArea = big ? 54 : 40
-  const trackPx = Math.max(40, H - labelArea)
+  const headroom = big ? 52 : 34
+  const trackPx = Math.max(40, H - labelArea - headroom)
+  const step = Math.max(1, niceStep(max / 5))
+  const gridLines = max > 1 ? Array.from({ length: Math.floor(max / step) }, (_, i) => (i + 1) * step) : []
 
   return (
-    <div className="flex w-full items-end justify-center gap-1.5 sm:gap-3" style={{ height: H }}>
+    <div className="relative flex w-full min-w-max items-end justify-center gap-1.5 sm:gap-3" style={{ height: H }}>
+      {gridLines.length > 0 && (
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
+          {gridLines.map((v) => (
+            <div key={v} className="absolute inset-x-0 border-t border-graphite/[0.08]" style={{ bottom: labelArea + (v / max) * trackPx }}>
+              <span className={cx('absolute bottom-0.5 left-0 font-semibold tabular text-graphite-soft/40', big ? 'text-xs' : 'text-[9px]')}>{fmt(v)}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <AnimatePresence initial={false}>
         {rows.map((row, i) => {
           const rank = ranks.get(row.team_id) ?? i + 1
@@ -32,13 +51,13 @@ export function FireBars({ rows, big = false, chartH }: { rows: LeaderboardRow[]
               layout
               layoutId={row.team_id}
               transition={reorder}
-              className="flex min-w-0 flex-1 flex-col items-center gap-2"
+              className="relative z-[1] flex min-w-[18px] flex-1 flex-col items-center gap-2"
               style={{ maxWidth: big ? 84 : 54 }}
             >
               <Bar row={row} sweep={sweep} leader={rank === 1} barPx={barPx} trackPx={trackPx} big={big} index={i} />
               <div className="flex w-full flex-col items-center gap-1">
                 <span className="shrink-0 rounded-full ring-1 ring-black/10" style={{ width: big ? 12 : 8, height: big ? 12 : 8, background: row.farbe }} />
-                <span className={cx('w-full truncate text-center font-semibold text-graphite', big ? 'text-base' : 'text-[10px]')} title={row.name}>
+                <span className={cx('w-full truncate text-center font-semibold text-graphite', big ? 'text-xs sm:text-base' : 'text-[10px]')} title={row.name}>
                   {row.name}
                 </span>
               </div>

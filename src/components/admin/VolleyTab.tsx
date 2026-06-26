@@ -1,49 +1,28 @@
 import { useCallback, useEffect, useState } from 'react'
-import { RotateCcw, Wand2 } from 'lucide-react'
-import { fetchVolleyMatches, generateVolleySchedule, resetVolley, setVolleyMatch } from '@/lib/api'
-import { VOLLEY_SCHIENEN, type VolleyMatch } from '@/lib/volley'
+import { QRCodeSVG } from 'qrcode.react'
+import { KeyRound, RotateCcw, Wand2 } from 'lucide-react'
+import { fetchVolleyMatches, fetchVolleyStation, fillVolleyFinals, generateVolleySchedule, resetVolley, setStationPin, setVolleyMatch } from '@/lib/api'
+import type { VolleyMatch } from '@/lib/volley'
+import { VolleyBoard, type VolleyMut } from '@/components/VolleyBoard'
 import { Button, EmblemLoader } from '@/components/ui'
-import { cx } from '@/lib/format'
 
-const STATUS: { id: VolleyMatch['status']; label: string }[] = [
-  { id: 'geplant', label: 'Geplant' },
-  { id: 'live', label: 'Live' },
-  { id: 'fertig', label: 'Fertig' },
-]
+type Station = { id: string; token: string; hasPin: boolean }
 
 export function VolleyTab() {
   const [matches, setMatches] = useState<VolleyMatch[] | null>(null)
+  const [station, setStation] = useState<Station | null>(null)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(() => {
     fetchVolleyMatches().then(setMatches).catch(() => setMatches([]))
+    fetchVolleyStation().then(setStation).catch(() => setStation(null))
   }, [])
   useEffect(load, [load])
 
-  const patch = (id: string, fields: Partial<VolleyMatch>) => {
-    setMatches((ms) => (ms ?? []).map((m) => (m.id === id ? { ...m, ...fields } : m)))
-  }
-
-  const commitScore = async (m: VolleyMatch, side: 'a' | 'b', raw: string) => {
-    const v = raw === '' ? null : Number.parseInt(raw, 10)
-    const value = v == null || Number.isNaN(v) ? null : v
-    const field = side === 'a' ? 'score_a' : 'score_b'
-    if (m[field] === value) return
-    patch(m.id, { [field]: value })
-    try {
-      await setVolleyMatch(m.id, { [field]: value })
-    } catch {
-      load()
-    }
-  }
-
-  const setStatus = async (m: VolleyMatch, status: VolleyMatch['status']) => {
-    patch(m.id, { status })
-    try {
-      await setVolleyMatch(m.id, { status })
-    } catch {
-      load()
-    }
+  const mut: VolleyMut = {
+    setScore: (m, a, b, status) => setVolleyMatch(m.id, { score_a: a, score_b: b, status }),
+    setTeams: (m, a, b) => setVolleyMatch(m.id, { team_a: a, team_b: b }),
+    fillFinals: (ms) => fillVolleyFinals(ms),
   }
 
   const generate = async () => {
@@ -75,83 +54,98 @@ export function VolleyTab() {
     )
   }
 
-  if (matches.length === 0) {
+  return (
+    <div className="space-y-6">
+      <LeaderPanel station={station} onSaved={load} />
+
+      {matches.length === 0 ? (
+        <div className="rounded-3xl bg-white p-10 text-center shadow-card ring-1 ring-black/5">
+          <p className="text-graphite-soft">Noch kein Spielplan. Erzeuge das Turnier (Gruppenphase je Schiene + Finalrunde um Platz 1/3/5).</p>
+          <Button className="mt-5" onClick={generate} disabled={busy}>
+            <Wand2 className="h-4 w-4" /> Spielplan erzeugen
+          </Button>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-graphite-soft">Ergebnisse eintragen, Spiele auf „Live" stellen, Finals besetzen.</p>
+            <Button size="sm" variant="ghost" onClick={reset} disabled={busy}>
+              <RotateCcw className="h-4 w-4" /> Zurücksetzen
+            </Button>
+          </div>
+          <VolleyBoard matches={matches} reload={load} mut={mut} />
+        </>
+      )}
+    </div>
+  )
+}
+
+function LeaderPanel({ station, onSaved }: { station: Station | null; onSaved: () => void }) {
+  const [pin, setPin] = useState('')
+  const [saving, setSaving] = useState(false)
+  const url = station ? `${window.location.origin}/v/${station.token}` : ''
+
+  const save = async (value: string | null) => {
+    if (!station) return
+    setSaving(true)
+    try {
+      await setStationPin(station.id, value)
+      setPin('')
+      onSaved()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!station) {
     return (
-      <div className="rounded-3xl bg-white p-10 text-center shadow-card ring-1 ring-black/5">
-        <p className="text-graphite-soft">Noch kein Spielplan. Erzeuge das Gruppen-Turnier (jede Klasse spielt einmal gegen jede in ihrer Gruppe).</p>
-        <Button className="mt-5" onClick={generate} disabled={busy}>
-          <Wand2 className="h-4 w-4" /> Spielplan erzeugen
-        </Button>
+      <div className="rounded-3xl bg-white p-5 text-sm text-graphite-soft shadow-card ring-1 ring-black/5">
+        Station „Volleyball-Turnier" nicht gefunden — bitte die aktuelle <b>setup.sql</b> in Supabase ausführen.
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-graphite-soft">Trage Ergebnisse ein und stelle laufende Spiele auf „Live".</p>
-        <Button size="sm" variant="ghost" onClick={reset} disabled={busy}>
-          <RotateCcw className="h-4 w-4" /> Zurücksetzen
-        </Button>
+    <div className="rounded-3xl bg-white p-5 shadow-card ring-1 ring-black/5">
+      <div className="flex items-center gap-2 text-sm font-bold text-graphite">
+        <KeyRound className="h-4 w-4 text-moss-600" /> Zugang für die Turnierleitung
       </div>
-
-      {VOLLEY_SCHIENEN.map((s) => (
-        <div key={s.schiene}>
-          <h3 className="font-display text-2xl text-graphite">{s.label}</h3>
-          <div className="mt-3 grid gap-3 lg:grid-cols-2">
-            {Object.keys(s.gruppen).map((g) => (
-              <div key={g} className="rounded-3xl bg-white p-4 shadow-card ring-1 ring-black/5">
-                <div className="label-mono text-[10px] text-graphite-soft">Gruppe {g}</div>
-                <div className="mt-2 space-y-1.5">
-                  {matches
-                    .filter((m) => m.schiene === s.schiene && m.gruppe === g)
-                    .map((m) => (
-                      <div key={m.id} className={cx('flex items-center gap-2 rounded-xl px-2 py-1.5', m.status === 'live' ? 'bg-moss-600/10' : 'bg-paper')}>
-                        <span className="flex-1 text-right text-sm font-bold text-graphite">{m.team_a}</span>
-                        <input
-                          inputMode="numeric"
-                          defaultValue={m.score_a ?? ''}
-                          key={`a${m.id}:${m.score_a ?? ''}`}
-                          onBlur={(e) => commitScore(m, 'a', e.target.value)}
-                          className="w-10 rounded-lg bg-white px-1 py-1 text-center tabular outline-none ring-1 ring-black/10 focus:ring-2 focus:ring-moss-400"
-                        />
-                        <span className="text-graphite-soft">:</span>
-                        <input
-                          inputMode="numeric"
-                          defaultValue={m.score_b ?? ''}
-                          key={`b${m.id}:${m.score_b ?? ''}`}
-                          onBlur={(e) => commitScore(m, 'b', e.target.value)}
-                          className="w-10 rounded-lg bg-white px-1 py-1 text-center tabular outline-none ring-1 ring-black/10 focus:ring-2 focus:ring-moss-400"
-                        />
-                        <span className="flex-1 text-sm font-bold text-graphite">{m.team_b}</span>
-                        <div className="flex shrink-0 gap-0.5">
-                          {STATUS.map((st) => (
-                            <button
-                              key={st.id}
-                              onClick={() => setStatus(m, st.id)}
-                              className={cx(
-                                'rounded-md px-1.5 py-1 text-[10px] font-bold transition',
-                                m.status === st.id
-                                  ? st.id === 'live'
-                                    ? 'bg-moss-600 text-white'
-                                    : st.id === 'fertig'
-                                      ? 'bg-graphite text-white'
-                                      : 'bg-graphite/15 text-graphite'
-                                  : 'text-graphite-soft hover:bg-graphite/10',
-                              )}
-                            >
-                              {st.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            ))}
+      <p className="mt-1 text-sm text-graphite-soft">
+        Mit QR-Code + PIN trägt die Leitung Ergebnisse selbst ein — ohne Admin-Login und nur fürs Volleyball-Turnier.
+      </p>
+      <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="grid h-32 w-32 shrink-0 place-items-center rounded-2xl bg-white p-2 ring-1 ring-black/10">
+          <QRCodeSVG value={url} size={108} level="M" fgColor="#101828" bgColor="#ffffff" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="break-all text-sm font-semibold text-graphite">{url.replace(/^https?:\/\//, '')}</div>
+          <div className="mt-1 text-xs text-graphite-soft">
+            Status:{' '}
+            {station.hasPin ? (
+              <span className="font-semibold text-moss-700">PIN gesetzt ✓</span>
+            ) : (
+              <span className="font-semibold text-crimson-500">Noch keine PIN</span>
+            )}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <input
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              inputMode="numeric"
+              placeholder="Neue PIN"
+              className="w-32 rounded-xl border border-graphite/12 bg-white px-3 py-2 text-base outline-none focus:border-moss-500"
+            />
+            <Button size="sm" onClick={() => save(pin.trim() || null)} disabled={saving || pin.trim() === ''}>
+              {station.hasPin ? 'PIN ändern' : 'PIN setzen'}
+            </Button>
+            {station.hasPin && (
+              <Button size="sm" variant="ghost" onClick={() => save(null)} disabled={saving}>
+                Entfernen
+              </Button>
+            )}
           </div>
         </div>
-      ))}
+      </div>
     </div>
   )
 }

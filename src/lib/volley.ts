@@ -7,6 +7,8 @@ export type VolleyMatch = {
   score_a: number | null
   score_b: number | null
   status: 'geplant' | 'live' | 'fertig'
+  phase: 'gruppe' | 'final'
+  platz: number | null
   sort: number
 }
 
@@ -23,6 +25,12 @@ export const VOLLEY_SCHIENEN = [
     zeit: '10:50 – 12:50 Uhr',
     gruppen: { A: ['9b', '9d', '10a', '10c', '10s'], B: ['9a', '9c', '9s', '10b', '10d'] } as Record<string, string[]>,
   },
+]
+
+export const FINALS = [
+  { platz: 1, rank: 0, titel: 'Finale', sub: 'um Platz 1' },
+  { platz: 3, rank: 1, titel: 'Kleines Finale', sub: 'um Platz 3' },
+  { platz: 5, rank: 2, titel: 'Platzierungsspiel', sub: 'um Platz 5' },
 ]
 
 export type Standing = {
@@ -80,14 +88,44 @@ export function roundRobinPairs(teams: string[]): [string, string][] {
   return pairs
 }
 
-export function buildSchedule(): Omit<VolleyMatch, 'id' | 'status' | 'score_a' | 'score_b'>[] {
-  const out: Omit<VolleyMatch, 'id' | 'status' | 'score_a' | 'score_b'>[] = []
+export function groupMatches(schiene: number, gruppe: string, matches: VolleyMatch[]): VolleyMatch[] {
+  return matches.filter((m) => m.phase === 'gruppe' && m.schiene === schiene && m.gruppe === gruppe)
+}
+
+export function computeFinalists(schiene: number, matches: VolleyMatch[]): { a: string; b: string }[] {
+  const s = VOLLEY_SCHIENEN.find((x) => x.schiene === schiene)
+  if (!s) return FINALS.map(() => ({ a: '', b: '' }))
+  const standA = computeStandings(s.gruppen.A, groupMatches(schiene, 'A', matches))
+  const standB = computeStandings(s.gruppen.B, groupMatches(schiene, 'B', matches))
+  return FINALS.map((f) => ({ a: standA[f.rank]?.team ?? '', b: standB[f.rank]?.team ?? '' }))
+}
+
+export type NewMatch = Omit<VolleyMatch, 'id'>
+
+export function buildSchedule(): NewMatch[] {
+  const out: NewMatch[] = []
   let sort = 0
   for (const s of VOLLEY_SCHIENEN) {
     for (const g of ['A', 'B']) {
       for (const [a, b] of roundRobinPairs(s.gruppen[g])) {
-        out.push({ schiene: s.schiene, gruppe: g, team_a: a, team_b: b, sort: sort++ })
+        out.push({ schiene: s.schiene, gruppe: g, team_a: a, team_b: b, score_a: null, score_b: null, status: 'geplant', phase: 'gruppe', platz: null, sort: sort++ })
       }
+    }
+  }
+  for (const s of VOLLEY_SCHIENEN) {
+    for (const f of FINALS) {
+      out.push({
+        schiene: s.schiene,
+        gruppe: '',
+        team_a: `${f.rank + 1}. Gruppe A`,
+        team_b: `${f.rank + 1}. Gruppe B`,
+        score_a: null,
+        score_b: null,
+        status: 'geplant',
+        phase: 'final',
+        platz: f.platz,
+        sort: sort++,
+      })
     }
   }
   return out

@@ -14,6 +14,7 @@ export type StationPublic = {
   gewicht: number
   einheit: string | null
   aktiv: boolean
+  pflicht: boolean
   sort: number
 }
 

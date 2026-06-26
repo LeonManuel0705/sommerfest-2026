@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
-import { ChevronDown, ChevronUp, Copy, KeyRound, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Asterisk, ChevronDown, ChevronUp, Copy, KeyRound, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { createStation, deleteStation, setStationPin, updateStation } from '@/lib/api'
 import type { StationAdmin } from '@/lib/types'
 import { Badge, Button, GlassCard, TextInput } from '@/components/ui'
@@ -92,7 +92,7 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
                           initial={{ opacity: 0, scale: 0.95, y: -4 }}
                           animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.95 }}
-                          className="glass-solid absolute left-0 top-full z-20 mt-1 grid w-56 grid-cols-6 gap-1 rounded-2xl p-2"
+                          className="glass-solid absolute left-0 top-full z-20 mt-1 grid w-auto max-w-[min(15rem,calc(100vw-2rem))] grid-cols-5 gap-1 rounded-2xl p-2"
                         >
                           {STATION_ICON_NAMES.map((name) => (
                             <button
@@ -101,7 +101,7 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
                                 patch(s.id, { icon: name })
                                 setIconPicker(null)
                               }}
-                              className="grid h-8 w-8 place-items-center rounded-lg text-graphite-soft transition hover:bg-moss-500/15 hover:text-moss-600"
+                              className="grid h-10 w-10 place-items-center rounded-lg text-graphite-soft transition hover:bg-moss-500/15 hover:text-moss-600"
                             >
                               <StationIcon name={name} className="h-4 w-4" />
                             </button>
@@ -119,8 +119,9 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
                   />
                   {!hasPin && <Badge className="bg-crimson-500/12 text-crimson-600">keine PIN</Badge>}
                   {!s.aktiv && <Badge className="bg-graphite/10 text-graphite-soft">inaktiv</Badge>}
+                  {!s.pflicht && <Badge className="bg-brass-400/15 text-brass-500">optional</Badge>}
                   {s.gewicht !== 1 && <Badge className="bg-moss-500/12 text-moss-700">×{s.gewicht}</Badge>}
-                  <button onClick={() => setOpen(isOpen ? null : s.id)} className="grid h-8 w-8 place-items-center rounded-lg text-graphite-soft hover:bg-graphite/[0.06]">
+                  <button onClick={() => setOpen(isOpen ? null : s.id)} className="grid h-11 w-11 place-items-center rounded-lg text-graphite-soft hover:bg-graphite/[0.06]">
                     {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </button>
                 </div>
@@ -136,7 +137,7 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
                             onChange={(e) => setItems((a) => a.map((x) => (x.id === s.id ? { ...x, beschreibung: e.target.value } : x)))}
                             onBlur={(e) => patch(s.id, { beschreibung: e.target.value })}
                           />
-                          <div className="flex gap-3">
+                          <div className="flex flex-wrap gap-3">
                             <TextInput
                               label="Einheit"
                               value={s.einheit ?? ''}
@@ -163,6 +164,9 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
                             <Button size="sm" variant="glass" onClick={() => patch(s.id, { aktiv: !s.aktiv })}>
                               {s.aktiv ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                               {s.aktiv ? 'Deaktivieren' : 'Aktivieren'}
+                            </Button>
+                            <Button size="sm" variant="glass" onClick={() => patch(s.id, { pflicht: !s.pflicht })}>
+                              <Asterisk className="h-4 w-4" /> {s.pflicht ? 'Als optional' : 'Als Pflicht'}
                             </Button>
                             <Button size="sm" variant="ghost" onClick={() => remove(s)} className="text-crimson-600">
                               <Trash2 className="h-4 w-4" /> Löschen

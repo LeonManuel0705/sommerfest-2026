@@ -6,6 +6,9 @@ import { useLiveData } from '@/lib/useLiveData'
 import { FireBars } from '@/components/FireBars'
 import { ConfettiBurst } from '@/components/ConfettiBurst'
 import { computeJahrgangWertung } from '@/lib/format'
+import { LottieLoop, LottieOnce } from '@/components/Lottie'
+import waveLoop from '@/assets/lottie/wave-loop.json'
+import celebrate from '@/assets/lottie/celebrate.json'
 
 type View = 'klassen' | 'jahrgang'
 
@@ -54,8 +57,12 @@ export default function Beamer() {
   const rows = isJg ? jahrgang : shown
 
   return (
-    <div className="relative min-h-dvh bg-paper px-10 py-8">
+    <div className="relative min-h-dvh bg-paper px-4 py-6 sm:px-10 sm:py-8">
       <ConfettiBurst fireKey={flash} />
+
+      <div aria-hidden className="pointer-events-none fixed inset-x-0 bottom-0 z-0 h-[24vh] opacity-[0.16]">
+        <LottieLoop data={waveLoop} className="h-full w-full" />
+      </div>
 
       <AnimatePresence>
         <motion.div
@@ -77,22 +84,25 @@ export default function Beamer() {
             transition={{ type: 'spring', stiffness: 220, damping: 20 }}
             className="pointer-events-none fixed left-1/2 top-6 z-[70] -translate-x-1/2"
           >
-            <div className="flex items-center gap-3 rounded-full bg-white/90 px-6 py-3 shadow-[0_20px_50px_-15px_rgba(5,150,105,0.6)] ring-1 ring-moss-400/40 backdrop-blur">
-              <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-b from-brass-300 to-brass-400 text-[#4a3508]">
-                <Crown className="h-5 w-5" />
-              </span>
-              <span className="text-lg font-bold text-graphite">
-                Neue Führung: <span className="text-gradient">{lead.name}</span>
-              </span>
+            <div className="relative">
+              <LottieOnce data={celebrate} className="pointer-events-none absolute -inset-x-12 -top-12 -z-10 h-44 opacity-90" />
+              <div className="flex max-w-[92vw] items-center gap-3 rounded-full bg-white/90 px-6 py-3 shadow-[0_20px_50px_-15px_rgba(5,150,105,0.6)] ring-1 ring-moss-400/40 backdrop-blur">
+                <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-b from-brass-300 to-brass-400 text-[#4a3508]">
+                  <Crown className="h-5 w-5" />
+                </span>
+                <span className="truncate text-base sm:text-lg font-bold text-graphite">
+                  Neue Führung: <span className="text-gradient">{lead.name}</span>
+                </span>
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <header className="mb-8 flex items-center justify-between">
+      <header className="relative z-10 mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="eyebrow text-sm text-moss-600">Ernst-Haeckel-Gymnasium · Sommerfest</div>
-          <div className="font-display text-6xl text-graphite">
+          <div className="font-display text-3xl sm:text-5xl lg:text-6xl text-graphite">
             Live <span className="text-moss-600">Scoreboard</span>
           </div>
           <AnimatePresence mode="wait">
@@ -131,9 +141,11 @@ export default function Beamer() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl">
+      <div className="relative z-10 mx-auto max-w-6xl">
         {rows.length > 0 ? (
-          <FireBars key={view} rows={rows} big chartH={500} />
+          <div className="overflow-x-auto no-scrollbar">
+            <FireBars key={view} rows={rows} big chartH={500} />
+          </div>
         ) : (
           <div className="py-20 text-center text-graphite-soft">Noch keine Wertungen.</div>
         )}

@@ -43,6 +43,7 @@ create table stations (
   token         text not null unique default encode(gen_random_bytes(8), 'hex'),
   pin_hash      text,
   aktiv         boolean not null default true,
+  pflicht       boolean not null default true,
   sort          int default 0,
   created_at    timestamptz default now()
 );
@@ -77,7 +78,7 @@ create index idx_audit_created  on audit_log(created_at desc);
 --  SICHTEN
 -- ----------------------------------------------------------------------------
 create view stations_public as
-  select id, name, beschreibung, icon, gewicht, einheit, aktiv, sort from stations;
+  select id, name, beschreibung, icon, gewicht, einheit, aktiv, pflicht, sort from stations;
 
 create view leaderboard as
   select
@@ -225,6 +226,8 @@ create table volley_matches (
   score_a    int,
   score_b    int,
   status     text not null default 'geplant',
+  phase      text not null default 'gruppe',
+  platz      int,
   sort       int  default 0,
   created_at timestamptz default now()
 );
@@ -232,6 +235,56 @@ alter table volley_matches enable row level security;
 create policy volley_select_all  on volley_matches for select using (true);
 create policy volley_write_admin on volley_matches for all
   using (auth.uid() is not null) with check (auth.uid() is not null);
+
+-- Turnierleitung: editiert das Volleyball-Turnier per Token + PIN der Station
+-- "Volleyball-Turnier" (wie eine normale Station), ganz ohne Admin-Login.
+create or replace function volley_auth(p_token text, p_pin text)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare v stations;
+begin
+  select * into v from stations where token = p_token and aktiv and name = 'Volleyball-Turnier';
+  if not found then return false; end if;
+  if v.pin_hash is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then return false; end if;
+  return true;
+end; $$;
+
+create or replace function volley_login(p_token text, p_pin text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v stations;
+begin
+  select * into v from stations where token = p_token and aktiv and name = 'Volleyball-Turnier';
+  if not found then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  if v.pin_hash is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
+    return jsonb_build_object('ok', false, 'error', 'wrong_pin');
+  end if;
+  return jsonb_build_object('ok', true, 'name', v.name);
+end; $$;
+
+create or replace function volley_set_match(
+  p_token text, p_pin text, p_id uuid, p_score_a int, p_score_b int, p_status text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if not volley_auth(p_token, p_pin) then return jsonb_build_object('ok', false, 'error', 'auth'); end if;
+  update volley_matches set score_a = p_score_a, score_b = p_score_b, status = p_status where id = p_id;
+  return jsonb_build_object('ok', found);
+end; $$;
+
+create or replace function volley_set_teams(
+  p_token text, p_pin text, p_id uuid, p_team_a text, p_team_b text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  if not volley_auth(p_token, p_pin) then return jsonb_build_object('ok', false, 'error', 'auth'); end if;
+  update volley_matches set team_a = p_team_a, team_b = p_team_b where id = p_id;
+  return jsonb_build_object('ok', found);
+end; $$;
+
+revoke all on function volley_auth(text, text)                             from public;
+revoke all on function volley_login(text, text)                            from public;
+revoke all on function volley_set_match(text, text, uuid, int, int, text)  from public;
+revoke all on function volley_set_teams(text, text, uuid, text, text)      from public;
+grant execute on function volley_login(text, text)                           to anon, authenticated;
+grant execute on function volley_set_match(text, text, uuid, int, int, text) to anon, authenticated;
+grant execute on function volley_set_teams(text, text, uuid, text, text)     to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
 --  REALTIME (idempotent – kein Fehler beim erneuten Ausführen)
@@ -250,13 +303,13 @@ begin
 end $$;
 
 -- ----------------------------------------------------------------------------
---  DATEN: Klassen 5s–10s (22) + die 12 Wertungs-Stationen (ohne PIN)
+--  DATEN: Klassen 5s–10s (21) + 12 Pflicht-Stationen + Versorgung (optional)
 -- ----------------------------------------------------------------------------
 insert into teams (name, jahrgang, farbe, sort) values
   ('5s',  5, '#f43f5e',  55),
   ('6s',  6, '#fb923c',  65),
   ('7a',  7, '#f59e0b',  71), ('7b', 7, '#f59e0b', 72), ('7c', 7, '#f59e0b', 73), ('7d', 7, '#f59e0b', 74), ('7s', 7, '#f59e0b', 75),
-  ('8a',  8, '#22c55e',  81), ('8b', 8, '#22c55e', 82), ('8c', 8, '#22c55e', 83), ('8d', 8, '#22c55e', 84), ('8s', 8, '#22c55e', 85),
+  ('8a',  8, '#22c55e',  81), ('8b', 8, '#22c55e', 82), ('8c', 8, '#22c55e', 83), ('8s', 8, '#22c55e', 85),
   ('9a',  9, '#06b6d4',  91), ('9b', 9, '#06b6d4', 92), ('9c', 9, '#06b6d4', 93), ('9d', 9, '#06b6d4', 94), ('9s', 9, '#06b6d4', 95),
   ('10a', 10, '#6366f1', 101), ('10b', 10, '#6366f1', 102), ('10c', 10, '#6366f1', 103), ('10d', 10, '#6366f1', 104), ('10s', 10, '#6366f1', 105)
 on conflict (name) do nothing;
@@ -275,5 +328,58 @@ insert into stations (name, beschreibung, icon, gewicht, einheit, pin_hash, sort
   ('Fotos',                'Kreativste Klassen-Fotos',           'target',     1, 'Punkte', null, 11),
   ('Volleyball-Turnier',   'Großes Finale in der Halle',         'goal',       1, 'Punkte', null, 12)
 on conflict (name) do nothing;
+
+-- Versorgung: zählt punktetechnisch wie eine Station, ist aber freiwillig (pflicht=false).
+insert into stations (name, beschreibung, icon, gewicht, einheit, pflicht, pin_hash, sort) values
+  ('Versorgung', 'Essen & Trinken — freiwillige Bonuspunkte', 'utensils', 1, 'Punkte', false, null, 13)
+on conflict (name) do nothing;
+
+-- ----------------------------------------------------------------------------
+--  VOLLEYBALL-SPIELPLAN (offizieller Plan 2026: Gruppenphase je Schiene + Finals)
+--  Steht direkt nach dem Setup bereit — kein "Spielplan erzeugen" mehr nötig.
+-- ----------------------------------------------------------------------------
+insert into volley_matches (schiene, gruppe, team_a, team_b, status, phase, platz, sort) values
+  (1, 'A', '7a', '7c', 'geplant', 'gruppe', null, 0),
+  (1, 'A', '7a', '7s', 'geplant', 'gruppe', null, 1),
+  (1, 'A', '7a', '8a', 'geplant', 'gruppe', null, 2),
+  (1, 'A', '7a', '8c', 'geplant', 'gruppe', null, 3),
+  (1, 'A', '7c', '7s', 'geplant', 'gruppe', null, 4),
+  (1, 'A', '7c', '8a', 'geplant', 'gruppe', null, 5),
+  (1, 'A', '7c', '8c', 'geplant', 'gruppe', null, 6),
+  (1, 'A', '7s', '8a', 'geplant', 'gruppe', null, 7),
+  (1, 'A', '7s', '8c', 'geplant', 'gruppe', null, 8),
+  (1, 'A', '8a', '8c', 'geplant', 'gruppe', null, 9),
+  (1, 'B', '7b', '7d', 'geplant', 'gruppe', null, 10),
+  (1, 'B', '7b', '8b', 'geplant', 'gruppe', null, 11),
+  (1, 'B', '7b', '8s', 'geplant', 'gruppe', null, 12),
+  (1, 'B', '7d', '8b', 'geplant', 'gruppe', null, 13),
+  (1, 'B', '7d', '8s', 'geplant', 'gruppe', null, 14),
+  (1, 'B', '8b', '8s', 'geplant', 'gruppe', null, 15),
+  (2, 'A', '9b', '9d', 'geplant', 'gruppe', null, 16),
+  (2, 'A', '9b', '10a', 'geplant', 'gruppe', null, 17),
+  (2, 'A', '9b', '10c', 'geplant', 'gruppe', null, 18),
+  (2, 'A', '9b', '10s', 'geplant', 'gruppe', null, 19),
+  (2, 'A', '9d', '10a', 'geplant', 'gruppe', null, 20),
+  (2, 'A', '9d', '10c', 'geplant', 'gruppe', null, 21),
+  (2, 'A', '9d', '10s', 'geplant', 'gruppe', null, 22),
+  (2, 'A', '10a', '10c', 'geplant', 'gruppe', null, 23),
+  (2, 'A', '10a', '10s', 'geplant', 'gruppe', null, 24),
+  (2, 'A', '10c', '10s', 'geplant', 'gruppe', null, 25),
+  (2, 'B', '9a', '9c', 'geplant', 'gruppe', null, 26),
+  (2, 'B', '9a', '9s', 'geplant', 'gruppe', null, 27),
+  (2, 'B', '9a', '10b', 'geplant', 'gruppe', null, 28),
+  (2, 'B', '9a', '10d', 'geplant', 'gruppe', null, 29),
+  (2, 'B', '9c', '9s', 'geplant', 'gruppe', null, 30),
+  (2, 'B', '9c', '10b', 'geplant', 'gruppe', null, 31),
+  (2, 'B', '9c', '10d', 'geplant', 'gruppe', null, 32),
+  (2, 'B', '9s', '10b', 'geplant', 'gruppe', null, 33),
+  (2, 'B', '9s', '10d', 'geplant', 'gruppe', null, 34),
+  (2, 'B', '10b', '10d', 'geplant', 'gruppe', null, 35),
+  (1, '', '1. Gruppe A', '1. Gruppe B', 'geplant', 'final', 1, 36),
+  (1, '', '2. Gruppe A', '2. Gruppe B', 'geplant', 'final', 3, 37),
+  (1, '', '3. Gruppe A', '3. Gruppe B', 'geplant', 'final', 5, 38),
+  (2, '', '1. Gruppe A', '1. Gruppe B', 'geplant', 'final', 1, 39),
+  (2, '', '2. Gruppe A', '2. Gruppe B', 'geplant', 'final', 3, 40),
+  (2, '', '3. Gruppe A', '3. Gruppe B', 'geplant', 'final', 5, 41);
 
 -- Fertig! ✅  Du solltest unten "Success. No rows returned" sehen.

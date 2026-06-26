@@ -25,3 +25,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Interne Notizen, Referenzmaterial & ungenutzte Assets
+*.md
+screenshots/
+design-reference/
+src/assets/haeckel/

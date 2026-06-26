@@ -183,7 +183,7 @@ export function OverviewTab({
                           }
                         }}
                         className={cx(
-                          'w-14 rounded-lg px-1 py-1.5 text-center tabular outline-none transition-colors duration-300 focus:bg-white focus:ring-2 focus:ring-moss-400',
+                          'w-14 rounded-lg px-1 py-1.5 text-center text-base tabular outline-none transition-colors duration-300 focus:bg-white focus:ring-2 focus:ring-moss-400',
                           flash[key] ? 'bg-moss-500/30 ring-2 ring-moss-500' : 'bg-graphite/[0.04]',
                         )}
                       />

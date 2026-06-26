@@ -55,7 +55,7 @@ export function Button({
       whileHover={props.disabled ? undefined : { y: -1 }}
       transition={spring}
       className={cx(
-        'sheen inline-flex items-center justify-center font-bold transition-colors select-none',
+        'sheen inline-flex min-h-[44px] items-center justify-center font-bold transition-colors select-none',
         'disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:relative [&_svg]:z-[2]',
         sizes[size],
         variants[variant],
@@ -80,7 +80,7 @@ export function TextInput({
       )}
       <input
         className={cx(
-          'w-full rounded-2xl border border-graphite/12 bg-white/70 px-4 py-3 text-[15px] font-medium text-graphite',
+          'w-full rounded-2xl border border-graphite/12 bg-white/70 px-4 py-3 text-base font-medium text-graphite',
           'outline-none transition focus:border-moss-500 focus:bg-white focus:ring-4 focus:ring-moss-500/15',
           'placeholder:text-graphite-soft/50',
           className,

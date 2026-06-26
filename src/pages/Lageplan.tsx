@@ -3,6 +3,7 @@ import { Building2, MapPin, Trees } from 'lucide-react'
 import { SiteHeader } from '@/components/site/SiteHeader'
 import { SiteFooter } from '@/components/site/SiteFooter'
 import { StationIcon } from '@/components/icons'
+import { cx } from '@/lib/format'
 
 type Ort = { nr: string; name: string; icon: string; ort: string }
 
@@ -24,41 +25,45 @@ const DRAUSSEN: Ort[] = [
   { nr: '—', name: 'Volleyball-Turnier', icon: 'goal', ort: 'Turnhalle' },
 ]
 
-function Karte({ o, i }: { o: Ort; i: number }) {
+type Theme = { card: string; chip: string; pin: string; nr: string; head: string }
+const DRIN: Theme = { card: 'bg-sky-50 ring-sky-600/10', chip: 'bg-sky-500/12 text-sky-600', pin: 'text-sky-500', nr: 'text-sky-700/55', head: 'bg-sky-500/12 text-sky-600' }
+const DRAUS: Theme = { card: 'bg-emerald-50 ring-emerald-700/10', chip: 'bg-moss-600/12 text-moss-700', pin: 'text-moss-600', nr: 'text-moss-700/55', head: 'bg-moss-600/12 text-moss-700' }
+
+function Karte({ o, i, t }: { o: Ort; i: number; t: Theme }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-40px' }}
       transition={{ type: 'spring', stiffness: 110, damping: 18, delay: (i % 3) * 0.04 }}
-      className="rounded-3xl bg-white p-5 shadow-card ring-1 ring-black/5"
+      className={cx('rounded-3xl p-5 shadow-card ring-1', t.card)}
     >
       <div className="flex items-center justify-between">
-        <span className="grid h-11 w-11 place-items-center rounded-2xl bg-moss-600/10 text-moss-700">
+        <span className={cx('grid h-11 w-11 place-items-center rounded-2xl', t.chip)}>
           <StationIcon name={o.icon} className="h-5 w-5" strokeWidth={1.9} />
         </span>
-        <span className="label-mono text-[10px] text-graphite-soft">Station {o.nr}</span>
+        <span className={cx('label-mono text-[10px]', t.nr)}>Station {o.nr}</span>
       </div>
       <h3 className="mt-4 text-lg font-bold text-graphite">{o.name}</h3>
       <div className="mt-1 flex items-start gap-1.5 text-sm text-graphite-soft">
-        <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-moss-600" /> {o.ort}
+        <MapPin className={cx('mt-0.5 h-4 w-4 shrink-0', t.pin)} /> {o.ort}
       </div>
     </motion.div>
   )
 }
 
-function Gruppe({ titel, Icon, orte, start }: { titel: string; Icon: typeof Building2; orte: Ort[]; start: number }) {
+function Gruppe({ titel, Icon, orte, start, t }: { titel: string; Icon: typeof Building2; orte: Ort[]; start: number; t: Theme }) {
   return (
     <div className="mt-10">
       <div className="flex items-center gap-2.5">
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-graphite/[0.05] text-graphite">
+        <span className={cx('grid h-9 w-9 place-items-center rounded-xl', t.head)}>
           <Icon className="h-5 w-5" />
         </span>
         <h2 className="font-display text-2xl text-graphite">{titel}</h2>
       </div>
       <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {orte.map((o, i) => (
-          <Karte key={o.name} o={o} i={start + i} />
+          <Karte key={o.name} o={o} i={start + i} t={t} />
         ))}
       </div>
     </div>
@@ -77,10 +82,18 @@ export default function Lageplan() {
             Jede Disziplin gibt es zweimal, damit mehrere Klassen gleichzeitig antreten — die beiden Stationen liegen oft in verschiedenen Räumen oder sogar
             Etagen. Achte deshalb auf die Raumnummer und das Stockwerk.
           </p>
+          <div className="mt-5 flex flex-wrap gap-2 text-sm font-semibold">
+            <span className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-sky-700 ring-1 ring-sky-600/10">
+              <span className="h-2.5 w-2.5 rounded-full bg-sky-500" /> Im Gebäude
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-moss-700 ring-1 ring-emerald-700/10">
+              <span className="h-2.5 w-2.5 rounded-full bg-moss-500" /> Auf dem Gelände
+            </span>
+          </div>
         </div>
 
-        <Gruppe titel="Im Gebäude" Icon={Building2} orte={DRINNEN} start={0} />
-        <Gruppe titel="Auf dem Schulgelände" Icon={Trees} orte={DRAUSSEN} start={DRINNEN.length} />
+        <Gruppe titel="Im Gebäude" Icon={Building2} orte={DRINNEN} start={0} t={DRIN} />
+        <Gruppe titel="Auf dem Schulgelände" Icon={Trees} orte={DRAUSSEN} start={DRINNEN.length} t={DRAUS} />
 
         <p className="mt-10 text-xs text-graphite-soft">EG = Erdgeschoss · 1. OG = erstes Obergeschoss. Bei Unsicherheit fragt die Orga oder eine Lehrkraft.</p>
       </main>

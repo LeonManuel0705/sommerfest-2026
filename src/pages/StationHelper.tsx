@@ -10,6 +10,8 @@ import { Button, EmblemLoader, GlassCard, Spinner, TextInput } from '@/component
 import { StationIcon } from '@/components/icons'
 import { cx, fmt } from '@/lib/format'
 import { spring } from '@/lib/motion'
+import { LottieOnce } from '@/components/Lottie'
+import checkGreen from '@/assets/lottie/check-green.json'
 
 type Phase = 'loading' | 'notfound' | 'locked' | 'ready'
 type StationInfo = { id: string; name: string; icon: string; beschreibung: string | null; einheit: string | null }
@@ -172,7 +174,7 @@ export default function StationHelper() {
 
   return (
     <div className="mx-auto min-h-dvh max-w-2xl px-4 py-5">
-      <header className="sticky top-0 z-10 -mx-4 mb-4 flex items-center justify-between gap-3 bg-paper/70 px-4 py-3 backdrop-blur-xl">
+      <header className="sticky top-0 z-10 -mx-4 mb-4 flex items-center justify-between gap-3 bg-paper/70 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <span className="grid h-11 w-11 place-items-center rounded-2xl bg-moss-500/10 text-moss-600 hairline">
             <StationIcon name={station.icon} className="h-5 w-5" strokeWidth={1.9} />
@@ -182,7 +184,7 @@ export default function StationHelper() {
             <p className="text-xs text-graphite-soft">{helfer ? `Helfer: ${helfer}` : 'Punkte eintragen'}</p>
           </div>
         </div>
-        <button onClick={logout} className="flex items-center gap-1.5 text-sm font-semibold text-graphite-soft hover:text-crimson-600">
+        <button onClick={logout} className="flex min-h-11 items-center gap-1.5 text-sm font-semibold text-graphite-soft hover:text-crimson-600">
           <LogOut className="h-4 w-4" /> Beenden
         </button>
       </header>
@@ -280,9 +282,14 @@ function ScoreEditor({
   onSave: (value: number) => void
 }) {
   const [raw, setRaw] = useState(String(current))
+  const [saved, setSaved] = useState(false)
   const parsed = Number.parseFloat(raw.replace(',', '.'))
   const value = Number.isFinite(parsed) ? parsed : 0
   const bump = (d: number) => setRaw(String(Math.max(0, Math.round((value + d) * 100) / 100)))
+  const save = () => {
+    setSaved(true)
+    window.setTimeout(() => onSave(value), 900)
+  }
 
   return (
     <motion.div className="fixed inset-0 z-50 grid place-items-end sm:place-items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -292,7 +299,7 @@ function ScoreEditor({
         animate={{ y: 0, opacity: 1, scale: 1 }}
         exit={{ y: 60, opacity: 0 }}
         transition={spring}
-        className="glass-solid relative w-full rounded-t-[2rem] p-6 sm:max-w-md sm:rounded-[2rem]"
+        className="glass-solid relative w-full rounded-t-[2rem] p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:max-w-md sm:rounded-[2rem]"
       >
         <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-graphite/15 sm:hidden" />
         <h2 className="text-center font-display text-xl font-bold">{teamName}</h2>
@@ -310,20 +317,29 @@ function ScoreEditor({
 
         <div className="mt-4 grid grid-cols-4 gap-2">
           {[+1, +5, +10, -1].map((d) => (
-            <button key={d} onClick={() => bump(d)} className="rounded-2xl bg-graphite/[0.05] py-2.5 font-bold text-graphite transition hover:bg-graphite/10">
+            <button key={d} onClick={() => bump(d)} className="min-h-11 rounded-2xl bg-graphite/[0.05] py-3 font-bold text-graphite transition hover:bg-graphite/10">
               {d > 0 ? `+${d}` : d}
             </button>
           ))}
         </div>
 
         <div className="mt-5 flex gap-3">
-          <Button variant="ghost" className="flex-1" onClick={onClose}>
+          <Button variant="ghost" className="flex-1" onClick={onClose} disabled={saved}>
             Abbrechen
           </Button>
-          <Button className="flex-1" size="lg" onClick={() => onSave(value)}>
+          <Button className="flex-1" size="lg" onClick={save} disabled={saved}>
             <Check className="h-5 w-5" /> Speichern
           </Button>
         </div>
+
+        {saved && (
+          <div className="absolute inset-0 z-10 grid place-items-center rounded-t-[2rem] bg-white/95 sm:rounded-[2rem]">
+            <div className="text-center">
+              <LottieOnce data={checkGreen} className="mx-auto h-32 w-32" />
+              <p className="-mt-2 font-display text-xl text-moss-700">Gespeichert!</p>
+            </div>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   )

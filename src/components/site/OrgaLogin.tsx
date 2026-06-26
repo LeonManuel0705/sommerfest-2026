@@ -54,7 +54,7 @@ function Field({
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-[54px] w-full rounded-2xl border border-white/60 bg-white/45 pr-4 pl-12 text-[15px] font-medium text-slate-800 outline-none transition placeholder:text-slate-500 focus:border-sky-300 focus:bg-white/85 focus:ring-4 focus:ring-sky-400/25 disabled:opacity-60"
+        className="h-[54px] w-full rounded-2xl border border-white/60 bg-white/45 pr-4 pl-12 text-base font-medium text-slate-800 outline-none transition placeholder:text-slate-500 focus:border-sky-300 focus:bg-white/85 focus:ring-4 focus:ring-sky-400/25 disabled:opacity-60"
         {...props}
       />
     </div>
@@ -214,7 +214,8 @@ export function OrgaLoginModal({ open, onClose }: { open: boolean; onClose: () =
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto p-4"
+          className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto py-6 px-4"
+          style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

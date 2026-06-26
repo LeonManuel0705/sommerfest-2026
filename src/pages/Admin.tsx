@@ -209,7 +209,7 @@ function AdminShell({
             key={id}
             onClick={() => setTab(id)}
             className={cx(
-              'relative flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold transition-colors',
+              'relative flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-3 text-sm font-bold transition-colors',
               tab === id ? 'text-white' : 'text-graphite-soft hover:text-graphite',
             )}
           >

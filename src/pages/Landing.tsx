@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLottie } from 'lottie-react'
 import rewardAnim from '@/assets/lottie/reward-light.json'
@@ -53,6 +53,21 @@ export default function Landing() {
   const podium = leaderboard.slice(0, 3)
   const jahrgang = computeJahrgangWertung(leaderboard)
   const [showAllStations, setShowAllStations] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  useEffect(() => {
+    if (searchParams.get('stationen') !== 'open') return
+    setShowAllStations(true)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('stationen')
+        return next
+      },
+      { replace: true },
+    )
+    window.setTimeout(() => document.getElementById('stationen')?.scrollIntoView({ behavior: 'smooth' }), 120)
+  }, [searchParams, setSearchParams])
 
   return (
     <div className="min-h-dvh bg-paper">
@@ -62,7 +77,7 @@ export default function Landing() {
         <div className="absolute inset-0" style={{ backgroundImage: 'url(/hero-bg.png)', backgroundSize: 'cover', backgroundPosition: 'center' }} />
         <div className="absolute inset-0 bg-gradient-to-b from-white/35 via-white/55 to-paper" />
         <RewardLight />
-        <div className="relative mx-auto max-w-4xl px-5 py-24 text-center sm:py-32">
+        <div className="relative mx-auto max-w-4xl px-5 py-16 text-center sm:py-32">
           <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-crimson-500 shadow-sm ring-1 ring-black/5">
               <span className="h-1.5 w-1.5 rounded-full bg-crimson-500" /> 7. Juli 2026
@@ -74,8 +89,8 @@ export default function Landing() {
             transition={{ type: 'spring', stiffness: 80, damping: 16, delay: 0.08 }}
             className="mt-7 font-display leading-[0.86]"
           >
-            <span className="block text-7xl text-graphite sm:text-8xl lg:text-[8.5rem]">Sommerfest</span>
-            <span className="block text-7xl text-moss-600 sm:text-8xl lg:text-[8.5rem]">2026</span>
+            <span className="block text-5xl text-graphite sm:text-8xl lg:text-[8.5rem]">Sommerfest</span>
+            <span className="block text-5xl text-moss-600 sm:text-8xl lg:text-[8.5rem]">2026</span>
           </motion.h1>
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="mt-7 text-xl font-semibold text-graphite">
             Ernst-Haeckel-Gymnasium Werder (Havel)
@@ -84,8 +99,8 @@ export default function Landing() {
             Organisiert vom Jahrgang 11
           </motion.p>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.42 }} className="mt-6 flex justify-center">
-            <span className="inline-flex items-center gap-2 rounded-full bg-graphite/[0.05] px-4 py-2 text-sm font-semibold text-graphite ring-1 ring-black/[0.06]">
-              <History className="h-4 w-4 text-moss-600" /> Motto: Zeitreise — von der Steinzeit bis Cyberpunk
+            <span className="inline-flex max-w-full items-center gap-2 rounded-full bg-graphite/[0.05] px-4 py-2 text-center text-sm font-semibold text-graphite ring-1 ring-black/[0.06]">
+              <History className="h-4 w-4 shrink-0 text-moss-600" /> <span className="min-w-0 break-words">Motto: Zeitreise — von der Steinzeit bis Cyberpunk</span>
             </span>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.46 }} className="mt-9 flex flex-wrap items-center justify-center gap-3">
@@ -105,7 +120,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-5xl px-5 py-20 sm:px-8">
+      <section className="mx-auto max-w-5xl px-5 py-14 sm:px-8 sm:py-20">
         <motion.div {...inView} className="text-center">
           <h2 className="font-display text-4xl text-graphite sm:text-5xl">Aktuelle Spitzenreiter</h2>
           <p className="mt-3 text-graphite-soft">Live-Stand der klassenübergreifenden Wertung</p>
@@ -208,7 +223,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-5xl px-5 py-20 sm:px-8">
+      <section className="mx-auto max-w-5xl px-5 py-14 sm:px-8 sm:py-20">
         <motion.div {...inView}>
           <p className="label-mono text-xs text-moss-600">Verpflegung</p>
           <h2 className="mt-2 font-display text-4xl text-graphite sm:text-5xl">Für Stärkung ist gesorgt</h2>
