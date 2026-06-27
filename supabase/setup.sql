@@ -137,7 +137,7 @@ declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv;
   if not found then return jsonb_build_object('ok', false, 'error', 'station_not_found'); end if;
-  if v.pin_hash is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
+  if v.pin_hash is null or p_pin is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
     return jsonb_build_object('ok', false, 'error', 'wrong_pin');
   end if;
   return jsonb_build_object(
@@ -159,7 +159,7 @@ declare v stations; v_old numeric;
 begin
   select * into v from stations where token = p_token and aktiv;
   if not found then return jsonb_build_object('ok', false, 'error', 'station_not_found'); end if;
-  if v.pin_hash is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
+  if v.pin_hash is null or p_pin is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
     return jsonb_build_object('ok', false, 'error', 'wrong_pin');
   end if;
   if not exists (select 1 from teams where id = p_team_id) then
@@ -299,7 +299,7 @@ declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv and name = 'Volleyball-Turnier';
   if not found then return false; end if;
-  if v.pin_hash is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then return false; end if;
+  if v.pin_hash is null or p_pin is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then return false; end if;
   return true;
 end; $$;
 
@@ -309,7 +309,7 @@ declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv and name = 'Volleyball-Turnier';
   if not found then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
-  if v.pin_hash is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
+  if v.pin_hash is null or p_pin is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
     return jsonb_build_object('ok', false, 'error', 'wrong_pin');
   end if;
   return jsonb_build_object('ok', true, 'name', v.name);
