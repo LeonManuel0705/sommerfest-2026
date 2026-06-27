@@ -58,13 +58,19 @@ export async function fetchDbHealth(): Promise<{ health: DbHealth; latencyMs: nu
 export async function getStationPublic(token: string) {
   const { data, error } = await supabase.rpc('get_station_public', { p_token: token })
   if (error) throw error
-  return data as { ok: boolean; station?: { id: string; name: string; icon: string; beschreibung: string | null; einheit: string | null } }
+  return data as { ok: boolean; station?: { id: string; name: string; icon: string; beschreibung: string | null; einheit: string | null; has_pin: boolean } }
 }
 
 export async function stationLogin(token: string, pin: string) {
   const { data, error } = await supabase.rpc('station_login', { p_token: token, p_pin: pin })
   if (error) throw error
   return data as ({ ok: true } & StationSession) | { ok: false; error: string }
+}
+
+export async function stationSetPin(token: string, pin: string) {
+  const { data, error } = await supabase.rpc('station_set_pin', { p_token: token, p_pin: pin })
+  if (error) throw error
+  return data as { ok: boolean; error?: string }
 }
 
 export async function submitScore(args: {

@@ -119,7 +119,7 @@ export function SiteHeader() {
             onClick={openLogin}
             className="hidden items-center gap-1.5 rounded-full bg-moss-600 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_20px_-10px_rgba(0,128,55,0.7)] transition hover:bg-moss-700 lg:inline-flex"
           >
-            <ShieldCheck className="h-4 w-4" /> Orga-Login
+            <ShieldCheck className="h-4 w-4" /> Admin-Login
           </button>
           <button
             onClick={() => setMenuOpen(true)}
@@ -198,7 +198,7 @@ export function SiteHeader() {
                   onClick={openLogin}
                   className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-2xl bg-moss-600 px-4 py-3.5 text-base font-semibold text-white shadow-[0_8px_20px_-10px_rgba(0,128,55,0.7)] transition hover:bg-moss-700"
                 >
-                  <ShieldCheck className="h-4 w-4" /> Orga-Login
+                  <ShieldCheck className="h-4 w-4" /> Admin-Login
                 </button>
               </motion.nav>
             </div>

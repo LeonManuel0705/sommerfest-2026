@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AlertTriangle, Check, ChevronRight, LogOut, RefreshCw, SearchX, WifiOff } from 'lucide-react'
-import { getStationPublic, stationLogin } from '@/lib/api'
+import { getStationPublic, stationLogin, stationSetPin } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { useScoreSubmitter } from '@/lib/useScoreSubmitter'
 import type { StationSession } from '@/lib/types'
@@ -14,7 +14,7 @@ import { LottieOnce } from '@/components/Lottie'
 import checkGreen from '@/assets/lottie/check-green.json'
 
 type Phase = 'loading' | 'notfound' | 'locked' | 'ready'
-type StationInfo = { id: string; name: string; icon: string; beschreibung: string | null; einheit: string | null }
+type StationInfo = { id: string; name: string; icon: string; beschreibung: string | null; einheit: string | null; has_pin: boolean }
 
 const sessKey = (token: string) => `sportfest_session_${token}`
 
@@ -24,6 +24,7 @@ export default function StationHelper() {
   const [info, setInfo] = useState<StationInfo | null>(null)
   const [session, setSession] = useState<StationSession | null>(null)
   const [pin, setPin] = useState('')
+  const [pinConfirm, setPinConfirm] = useState('')
   const [helfer, setHelfer] = useState('')
   const [loginError, setLoginError] = useState<string | null>(null)
   const [loggingIn, setLoggingIn] = useState(false)
@@ -49,13 +50,35 @@ export default function StationHelper() {
           sessionStorage.removeItem(sessKey(token))
           setPhase('locked')
         }
-      } catch {
-        setLoginError('Keine Verbindung. Prüfe das WLAN und versuch es nochmal.')
+      } catch (e) {
+        setLoginError(e instanceof Error && e.message ? `Fehler: ${e.message}` : 'Keine Verbindung. Prüfe das WLAN und versuch es nochmal.')
       } finally {
         setLoggingIn(false)
       }
     },
     [token],
+  )
+
+  const doSetPin = useCallback(
+    async (newPin: string, tryHelfer: string) => {
+      setLoginError(null)
+      setLoggingIn(true)
+      try {
+        const res = await stationSetPin(token, newPin)
+        if (!res.ok) {
+          if (res.error === 'already_set') setInfo((i) => (i ? { ...i, has_pin: true } : i))
+          setLoginError(res.error === 'already_set' ? 'Es wurde gerade eine PIN festgelegt — bitte jetzt einloggen.' : 'PIN konnte nicht gesetzt werden.')
+          setLoggingIn(false)
+          return
+        }
+      } catch (e) {
+        setLoginError(e instanceof Error && e.message ? `Fehler: ${e.message}` : 'Keine Verbindung. Prüfe das WLAN und versuch es nochmal.')
+        setLoggingIn(false)
+        return
+      }
+      await doLogin(newPin, tryHelfer)
+    },
+    [token, doLogin],
   )
 
   useEffect(() => {
@@ -149,20 +172,42 @@ export default function StationHelper() {
               <h1 className="font-display text-2xl font-bold">{info?.name}</h1>
               {info?.beschreibung && <p className="mt-1 text-sm text-graphite-soft">{info.beschreibung}</p>}
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                void doLogin(pin, helfer)
-              }}
-              className="space-y-3"
-            >
-              <TextInput label="Dein Name (optional)" placeholder="z.B. Leon" value={helfer} onChange={(e) => setHelfer(e.target.value)} autoComplete="off" />
-              <TextInput label="Stations-PIN" inputMode="numeric" placeholder="••••" value={pin} onChange={(e) => setPin(e.target.value)} autoFocus />
-              {loginError && <p className="text-sm font-semibold text-crimson-600">{loginError}</p>}
-              <Button type="submit" size="lg" className="w-full" disabled={loggingIn || !pin}>
-                {loggingIn ? <Spinner className="h-5 w-5 border-white/30 border-t-white" /> : 'Station starten'}
-              </Button>
-            </form>
+            {info?.has_pin === false ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (pin.trim() && pin === pinConfirm) void doSetPin(pin.trim(), helfer)
+                }}
+                className="space-y-3"
+              >
+                <p className="rounded-2xl bg-brass-400/10 px-4 py-2.5 text-sm text-brass-600">
+                  Diese Station hat noch keine PIN. Leg jetzt eine fest — <b>merkt sie euch</b>, ihr braucht sie zum Eintragen.
+                </p>
+                <TextInput label="Dein Name (optional)" placeholder="z.B. Leon" value={helfer} onChange={(e) => setHelfer(e.target.value)} autoComplete="off" />
+                <TextInput label="Neue Stations-PIN" inputMode="numeric" placeholder="••••" value={pin} onChange={(e) => setPin(e.target.value)} autoFocus />
+                <TextInput label="PIN wiederholen" inputMode="numeric" placeholder="••••" value={pinConfirm} onChange={(e) => setPinConfirm(e.target.value)} />
+                {pin && pinConfirm && pin !== pinConfirm && <p className="text-sm font-semibold text-crimson-600">Die PINs stimmen nicht überein.</p>}
+                {loginError && <p className="text-sm font-semibold text-crimson-600">{loginError}</p>}
+                <Button type="submit" size="lg" className="w-full" disabled={loggingIn || !pin.trim() || pin !== pinConfirm}>
+                  {loggingIn ? <Spinner className="h-5 w-5 border-white/30 border-t-white" /> : 'PIN festlegen & starten'}
+                </Button>
+              </form>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void doLogin(pin, helfer)
+                }}
+                className="space-y-3"
+              >
+                <TextInput label="Dein Name (optional)" placeholder="z.B. Leon" value={helfer} onChange={(e) => setHelfer(e.target.value)} autoComplete="off" />
+                <TextInput label="Stations-PIN" inputMode="numeric" placeholder="••••" value={pin} onChange={(e) => setPin(e.target.value)} autoFocus />
+                {loginError && <p className="text-sm font-semibold text-crimson-600">{loginError}</p>}
+                <Button type="submit" size="lg" className="w-full" disabled={loggingIn || !pin}>
+                  {loggingIn ? <Spinner className="h-5 w-5 border-white/30 border-t-white" /> : 'Station starten'}
+                </Button>
+              </form>
+            )}
           </GlassCard>
         </motion.div>
       </div>

@@ -50,7 +50,7 @@ export default function Leaderboard() {
           <div className="mt-8 rounded-3xl bg-white p-6 text-center text-crimson-500 shadow-card ring-1 ring-black/5">Fehler: {error}</div>
         ) : leaderboard.length === 0 ? (
           <div className="mt-8 rounded-3xl bg-white p-12 text-center text-graphite-soft shadow-card ring-1 ring-black/5">
-            Noch keine Klassen angelegt. Die Orga richtet das im Admin-Bereich ein.
+            Noch keine Klassen angelegt. Die Admins richten das im Admin-Bereich ein.
           </div>
         ) : (
           <>

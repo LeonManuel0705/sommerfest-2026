@@ -26,7 +26,7 @@ export default function Datenschutz() {
                 <b>Server-Logdaten</b> beim Aufruf der Seite (u. a. gekürzte IP-Adresse, Zeitpunkt, Browsertyp) — technisch notwendig für den Betrieb (Art. 6 Abs. 1 lit. f DSGVO).
               </li>
               <li>
-                <b>Orga-Zugang:</b> E-Mail-Adresse und Anmeldedaten der Organisator:innen für den geschützten Admin-Bereich.
+                <b>Admin-Zugang:</b> E-Mail-Adresse und Anmeldedaten der Admins für den geschützten Admin-Bereich.
               </li>
               <li>
                 <b>Wertungsdaten:</b> Punktestände je Klasse. Dies sind <b>keine personenbezogenen Schülerdaten</b> (es werden Klassen, keine Namen erfasst).

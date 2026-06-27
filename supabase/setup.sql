@@ -119,18 +119,19 @@ grant select on leaderboard     to anon, authenticated;
 --  FUNKTIONEN
 -- ----------------------------------------------------------------------------
 create or replace function get_station_public(p_token text)
-returns jsonb language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv;
   if not found then return jsonb_build_object('ok', false); end if;
   return jsonb_build_object('ok', true, 'station', jsonb_build_object(
     'id', v.id, 'name', v.name, 'icon', v.icon,
-    'beschreibung', v.beschreibung, 'einheit', v.einheit));
+    'beschreibung', v.beschreibung, 'einheit', v.einheit,
+    'has_pin', v.pin_hash is not null));
 end; $$;
 
 create or replace function station_login(p_token text, p_pin text)
-returns jsonb language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv;
@@ -152,7 +153,7 @@ end; $$;
 create or replace function submit_score(
   p_token text, p_pin text, p_team_id uuid, p_punkte numeric,
   p_helfer text default null, p_notiz text default null)
-returns jsonb language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare v stations; v_old numeric;
 begin
   select * into v from stations where token = p_token and aktiv;
@@ -175,7 +176,7 @@ begin
 end; $$;
 
 create or replace function set_station_pin(p_station_id uuid, p_pin text)
-returns jsonb language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 begin
   if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'not_authenticated'); end if;
   update stations set pin_hash = case when p_pin is null or p_pin = '' then null
@@ -192,8 +193,24 @@ grant execute on function station_login(text, text)                          to 
 grant execute on function get_station_public(text)                           to anon, authenticated;
 grant execute on function set_station_pin(uuid, text)                        to authenticated;
 
+-- Stationsleitung legt beim ERSTEN Zugriff selbst eine PIN fest (nur wenn noch keine
+-- gesetzt ist). Danach gesperrt — nur Admins können per set_station_pin zurücksetzen.
+create or replace function station_set_pin(p_token text, p_pin text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v stations;
+begin
+  select * into v from stations where token = p_token and aktiv;
+  if not found then return jsonb_build_object('ok', false, 'error', 'station_not_found'); end if;
+  if v.pin_hash is not null then return jsonb_build_object('ok', false, 'error', 'already_set'); end if;
+  if p_pin is null or length(btrim(p_pin)) = 0 then return jsonb_build_object('ok', false, 'error', 'empty'); end if;
+  update stations set pin_hash = crypt(btrim(p_pin), gen_salt('bf')) where id = v.id;
+  return jsonb_build_object('ok', true);
+end; $$;
+revoke all on function station_set_pin(text, text) from public;
+grant execute on function station_set_pin(text, text) to anon, authenticated;
+
 create or replace function db_health()
-returns jsonb language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare d pg_stat_database;
 begin
   if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'not_authenticated'); end if;
@@ -239,7 +256,7 @@ create policy volley_write_admin on volley_matches for all
 -- Turnierleitung: editiert das Volleyball-Turnier per Token + PIN der Station
 -- "Volleyball-Turnier" (wie eine normale Station), ganz ohne Admin-Login.
 create or replace function volley_auth(p_token text, p_pin text)
-returns boolean language plpgsql security definer set search_path = public as $$
+returns boolean language plpgsql security definer set search_path = public, extensions as $$
 declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv and name = 'Volleyball-Turnier';
@@ -249,7 +266,7 @@ begin
 end; $$;
 
 create or replace function volley_login(p_token text, p_pin text)
-returns jsonb language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv and name = 'Volleyball-Turnier';
@@ -262,7 +279,7 @@ end; $$;
 
 create or replace function volley_set_match(
   p_token text, p_pin text, p_id uuid, p_score_a int, p_score_b int, p_status text)
-returns jsonb language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 begin
   if not volley_auth(p_token, p_pin) then return jsonb_build_object('ok', false, 'error', 'auth'); end if;
   update volley_matches set score_a = p_score_a, score_b = p_score_b, status = p_status where id = p_id;
@@ -271,7 +288,7 @@ end; $$;
 
 create or replace function volley_set_teams(
   p_token text, p_pin text, p_id uuid, p_team_a text, p_team_b text)
-returns jsonb language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 begin
   if not volley_auth(p_token, p_pin) then return jsonb_build_object('ok', false, 'error', 'auth'); end if;
   update volley_matches set team_a = p_team_a, team_b = p_team_b where id = p_id;

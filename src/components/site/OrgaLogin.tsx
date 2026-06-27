@@ -171,8 +171,8 @@ export function OrgaLoginCard({ onSuccess, onAuthenticated, bottom }: { onSucces
           </div>
         </motion.div>
 
-        <h1 className="mt-6 text-center text-[26px] font-bold tracking-tight text-slate-800">Orga-Login</h1>
-        <p className="mt-1.5 text-center text-sm text-slate-500">Nur fürs Sommerfest-Team.</p>
+        <h1 className="mt-6 text-center text-[26px] font-bold tracking-tight text-slate-800">Admin-Login</h1>
+        <p className="mt-1.5 text-center text-sm text-slate-500">Nur für Admins.</p>
 
         <form onSubmit={submit} className="mt-7 space-y-3.5">
           <div className="flex min-h-[20px] items-center justify-center px-1">
