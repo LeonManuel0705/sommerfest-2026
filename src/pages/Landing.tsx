@@ -3,10 +3,12 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLottie } from 'lottie-react'
 import rewardAnim from '@/assets/lottie/reward-light.json'
-import { ArrowRight, Cake, Clock, CupSoda, Flame, History, Info, MapPin, MonitorPlay, Trophy, Volleyball } from 'lucide-react'
+import { ArrowRight, Cake, CalendarDays, ChevronRight, Clock, CupSoda, Flag, Flame, History, Info, Lock, MapPin, MonitorPlay, Sprout, TrendingUp, Trophy, Volleyball } from 'lucide-react'
 import { SiteHeader } from '@/components/site/SiteHeader'
 import { SiteFooter } from '@/components/site/SiteFooter'
 import { useLiveData } from '@/lib/useLiveData'
+import { useScoreboardFrozen } from '@/lib/useSettings'
+import { ScoreboardLocked } from '@/components/ScoreboardLocked'
 import { computeJahrgangWertung, cx, fmt } from '@/lib/format'
 import type { LeaderboardRow } from '@/lib/types'
 
@@ -50,9 +52,11 @@ const inView = {
 
 export default function Landing() {
   const { leaderboard } = useLiveData({ realtime: false, pollMs: 8000 })
+  const frozen = useScoreboardFrozen()
   const podium = leaderboard.slice(0, 3)
   const jahrgang = computeJahrgangWertung(leaderboard)
   const [showAllStations, setShowAllStations] = useState(false)
+  const [showAllZeit, setShowAllZeit] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
 
   useEffect(() => {
@@ -122,19 +126,27 @@ export default function Landing() {
 
       <section className="mx-auto max-w-5xl px-5 py-14 sm:px-8 sm:py-20">
         <motion.div {...inView} className="text-center">
-          <h2 className="font-display text-4xl text-graphite sm:text-5xl">Aktuelle Spitzenreiter</h2>
-          <p className="mt-3 text-graphite-soft">Live-Stand der klassenübergreifenden Wertung</p>
+          <div className="flex justify-center">
+            <Kicker Icon={Trophy}>Live-Wertung</Kicker>
+          </div>
+          <h2 className="mt-3 font-display text-4xl text-graphite sm:text-5xl">Aktuelle Spitzenreiter</h2>
+          <p className="mt-3 text-graphite-soft">Klassenübergreifende Gesamtwertung, live aktualisiert.</p>
         </motion.div>
-        {podium.length > 0 ? (
-          <div className="mt-14 grid items-end gap-5 sm:grid-cols-3">
-            {[podium[1], podium[0], podium[2]].map((row, i) =>
-              row ? <PodiumCard key={row.team_id} row={row} rank={i === 1 ? 1 : i === 0 ? 2 : 3} leader={i === 1} /> : <div key={i} className="hidden sm:block" />,
-            )}
+        {frozen ? (
+          <div className="mt-12">
+            <ScoreboardLocked />
           </div>
+        ) : podium.length > 0 ? (
+          <PodiumStage podium={podium} />
         ) : (
-          <div className="mt-12 rounded-3xl bg-white p-12 text-center text-graphite-soft shadow-card ring-1 ring-black/5">
-            Sobald Punkte eingetragen werden, erscheinen hier die Führenden.
-          </div>
+          <motion.div {...inView} className="relative mx-auto mt-12 aspect-[147/107] w-full overflow-hidden rounded-[2rem] shadow-card ring-1 ring-black/5">
+            <img src="/podium.jpg" alt="Siegerpodest" className="absolute inset-0 h-full w-full object-cover" />
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-graphite/70 via-graphite/20 to-transparent p-6 pt-16 text-center">
+              <p className="text-sm font-semibold text-white/95 sm:text-base">
+                Sobald die ersten Punkte eingetragen werden, stehen hier die Führenden auf dem Podest.
+              </p>
+            </div>
+          </motion.div>
         )}
       </section>
 
@@ -142,41 +154,74 @@ export default function Landing() {
         <motion.div {...inView} className="rounded-3xl bg-white p-7 shadow-card ring-1 ring-black/5">
           <Eyebrow Icon={Trophy} tint="crimson">Gesamtwertung</Eyebrow>
           <h3 className="mt-3 font-display text-3xl text-graphite">Jahrgangs-Duell</h3>
-          <JahrgangBars rows={jahrgang} />
+          {frozen ? (
+            <p className="mt-6 flex items-center justify-center gap-2 rounded-2xl bg-graphite/[0.04] px-4 py-8 text-center text-sm font-semibold text-graphite-soft">
+              <Lock className="h-4 w-4 text-moss-600" /> Wird bei der Siegerehrung enthüllt.
+            </p>
+          ) : (
+            <>
+              <JahrgangBars rows={jahrgang} />
+              <div className="mt-5 flex items-center gap-2 rounded-2xl bg-moss-600/[0.07] px-4 py-2.5 text-sm font-medium text-moss-700 ring-1 ring-moss-600/10">
+                <TrendingUp className="h-4 w-4 shrink-0" /> Die Platzierungen werden laufend aktualisiert.
+              </div>
+            </>
+          )}
         </motion.div>
 
-        <motion.div {...inView} className="rounded-3xl bg-white p-7 shadow-card ring-1 ring-black/5">
+        <motion.div {...inView} className="flex flex-col rounded-3xl bg-white p-7 shadow-card ring-1 ring-black/5">
           <Eyebrow Icon={Clock} tint="moss">Ablauf</Eyebrow>
           <h3 className="mt-3 font-display text-3xl text-graphite">Zeitplan</h3>
           <ol className="mt-6 space-y-5">
-            {ZEITPLAN.map((z, i) => (
-              <li key={z.time} className="relative flex gap-4 pl-1">
-                <div className="relative flex flex-col items-center">
-                  <span className="mt-1 grid h-3.5 w-3.5 place-items-center rounded-full bg-moss-600 ring-4 ring-moss-600/15" />
-                  {i < ZEITPLAN.length - 1 && <span className="mt-1 w-px flex-1 bg-graphite/10" />}
-                </div>
-                <div className="-mt-0.5 pb-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-bold tabular text-graphite">{z.time}</span>
-                    <span className="font-semibold text-graphite">{z.title}</span>
-                  </div>
-                  <p className="mt-0.5 text-sm text-graphite-soft">{z.desc}</p>
-                </div>
-              </li>
+            {ZEITPLAN.slice(0, 4).map((z, i) => (
+              <ZeitItem key={z.time} z={z} connector={i < 3 || showAllZeit} />
             ))}
           </ol>
+          <AnimatePresence initial={false}>
+            {showAllZeit && (
+              <motion.ol
+                key="zeit-more"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.4, ease: [0.22, 0.61, 0.36, 1] }}
+                className="space-y-5 overflow-hidden pt-5"
+              >
+                {ZEITPLAN.slice(4).map((z, i, arr) => (
+                  <ZeitItem key={z.time} z={z} connector={i < arr.length - 1} />
+                ))}
+              </motion.ol>
+            )}
+          </AnimatePresence>
+          <p className="mt-5 text-sm font-medium text-graphite-soft">Viel Erfolg und Spaß beim Sammeln von Punkten!</p>
+          <button
+            onClick={() => setShowAllZeit((v) => !v)}
+            className="mt-4 inline-flex w-fit items-center gap-2 rounded-2xl bg-moss-600/10 px-4 py-2.5 text-sm font-semibold text-moss-700 transition hover:bg-moss-600/15"
+          >
+            <CalendarDays className="h-4 w-4" /> {showAllZeit ? 'Weniger anzeigen' : 'Kompletten Ablauf ansehen'}
+            <ChevronRight className={cx('h-4 w-4 transition-transform', showAllZeit && 'rotate-90')} />
+          </button>
         </motion.div>
       </section>
 
       <section id="stationen" className="mt-12 border-y border-graphite/[0.06] bg-white py-20">
         <div className="mx-auto max-w-5xl px-5 sm:px-8">
-          <motion.div {...inView}>
-            <p className="label-mono text-xs text-moss-600">Wettkampf</p>
-            <h2 className="mt-2 font-display text-4xl text-graphite sm:text-5xl">11 Stationen — eine Siegerklasse</h2>
-            <p className="mt-4 max-w-2xl text-lg leading-relaxed text-graphite-soft">
-              Von Allgemeinwissen-Quiz über Pantomime bis Sackhüpfen: Ihr tretet als Klasse an 11 Stationen an und sammelt Punkte. Dazu das große
-              Volleyball-Turnier der Jahrgänge 7–10. Am Ende steht fest, wer die beste Klasse der ganzen Schule ist.
-            </p>
+          <motion.div {...inView} className="flex items-start justify-between gap-6">
+            <div className="max-w-2xl">
+              <Kicker Icon={Flag}>Wettkampf</Kicker>
+              <h2 className="mt-4 font-display text-4xl text-graphite sm:text-5xl">11 Stationen — eine Siegerklasse</h2>
+              <p className="mt-4 text-lg leading-relaxed text-graphite-soft">
+                Von Allgemeinwissen-Quiz über Pantomime bis Sackhüpfen: Ihr tretet als Klasse an 11 Stationen an und sammelt Punkte. Dazu das große
+                Volleyball-Turnier der Jahrgänge 7–10. Am Ende steht fest, wer die beste Klasse der ganzen Schule ist.
+              </p>
+            </div>
+            <motion.img
+              src="/illus/trophy.png?v=2"
+              alt=""
+              aria-hidden
+              className="hidden w-40 shrink-0 self-center sm:block lg:w-48"
+              animate={{ y: [0, -8, 0] }}
+              transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+            />
           </motion.div>
           <motion.div {...inView} className="mt-8 flex flex-wrap items-center gap-3">
             {STATIONEN.slice(0, STATIONEN_VISIBLE).map((s) => (
@@ -206,49 +251,61 @@ export default function Landing() {
               {showAllStations ? 'Weniger anzeigen' : `+ ${STATIONEN.length - STATIONEN_VISIBLE} weitere`}
             </button>
           </motion.div>
-          <motion.div {...inView} className="mt-6 flex flex-wrap gap-3">
-            <Link
-              to="/lageplan"
-              className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-graphite ring-1 ring-black/[0.08] transition hover:bg-paper-2"
-            >
-              <MapPin className="h-4 w-4 text-moss-600" /> Wo finde ich was?
-            </Link>
-            <Link
-              to="/volleyball"
-              className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-graphite ring-1 ring-black/[0.08] transition hover:bg-paper-2"
-            >
-              <Volleyball className="h-4 w-4 text-moss-600" /> Volleyball-Turnierplan
-            </Link>
+          <motion.div {...inView} className="mt-8 grid gap-4 sm:grid-cols-2">
+            <NavCard to="/lageplan" Icon={MapPin} title="Wo finde ich was?" sub="Lageplan, Stationen & wichtige Orte" />
+            <NavCard to="/volleyball" Icon={Volleyball} title="Volleyball-Turnierplan" sub="Spielplan, Teams & Zahlen" />
           </motion.div>
         </div>
       </section>
 
       <section className="mx-auto max-w-5xl px-5 py-14 sm:px-8 sm:py-20">
-        <motion.div {...inView}>
-          <p className="label-mono text-xs text-moss-600">Verpflegung</p>
-          <h2 className="mt-2 font-display text-4xl text-graphite sm:text-5xl">Für Stärkung ist gesorgt</h2>
+        <motion.div {...inView} className="flex items-start justify-between gap-6">
+          <div>
+            <Kicker Icon={Sprout}>Verpflegung</Kicker>
+            <h2 className="mt-4 font-display text-4xl text-graphite sm:text-5xl">
+              Für Stärkung ist{' '}
+              <span className="relative inline-block whitespace-nowrap">
+                gesorgt
+                <Underline className="absolute -bottom-1.5 left-0 h-3 w-full text-moss-500" />
+              </span>
+            </h2>
+          </div>
+          <motion.img
+            src="/illus/food.png?v=2"
+            alt=""
+            aria-hidden
+            className="hidden w-28 shrink-0 self-center sm:block lg:w-32"
+            animate={{ y: [0, -7, 0] }}
+            transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+          />
         </motion.div>
         <div className="mt-10 grid gap-5 sm:grid-cols-3">
           {VERPFLEGUNG.map(({ Icon, title, desc }) => (
-            <motion.div {...inView} key={title} className="rounded-3xl bg-white p-7 shadow-card ring-1 ring-black/5">
-              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-moss-600/10 text-moss-700">
-                <Icon className="h-6 w-6" />
+            <motion.div
+              {...inView}
+              key={title}
+              className="rounded-3xl bg-white p-7 shadow-card ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:ring-moss-500/25"
+            >
+              <span className="text-moss-600">
+                <Icon className="h-8 w-8" strokeWidth={1.6} />
               </span>
               <h3 className="mt-4 text-lg font-bold text-graphite">{title}</h3>
               <p className="mt-1 text-sm text-graphite-soft">{desc}</p>
             </motion.div>
           ))}
-          <motion.div {...inView} className="rounded-3xl border border-dashed border-graphite/15 p-7 sm:col-span-3">
-            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brass-400/15 text-brass-500">
-              <Info className="h-6 w-6" />
-            </span>
-            <h3 className="mt-4 text-lg font-bold text-graphite">Gut zu wissen</h3>
-            <p className="mt-1 text-sm text-graphite-soft">
+        </div>
+        <motion.div {...inView} className="mt-5 flex items-start gap-4 rounded-3xl bg-brass-400/10 p-6 ring-1 ring-brass-400/25">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brass-400/20 text-brass-500">
+            <Info className="h-5 w-5" />
+          </span>
+          <div>
+            <h3 className="font-bold text-graphite">Gut zu wissen</h3>
+            <p className="mt-1 text-sm leading-relaxed text-graphite-soft">
               Die Stände vom Jahrgang 11 sind kostenpflichtig — der Erlös finanziert den Abiball, die Cafeteria bleibt geschlossen. Bringt etwas Taschengeld mit
               und denkt bei Sommerwetter an Sonnenschutz und genug zu trinken.
             </p>
-          </motion.div>
-        </div>
+          </div>
+        </motion.div>
         <motion.div {...inView} className="mt-12 flex justify-center">
           <Link
             to="/rangliste"
@@ -310,32 +367,129 @@ function Eyebrow({ Icon, tint, children }: { Icon: typeof Trophy; tint: 'moss' |
   )
 }
 
-function PodiumCard({ row, rank, leader }: { row: LeaderboardRow; rank: number; leader: boolean }) {
+function Kicker({ Icon, children }: { Icon: typeof Trophy; children: React.ReactNode }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-60px' }}
-      transition={{ type: 'spring', stiffness: 90, damping: 17, delay: leader ? 0 : 0.08 }}
-      className={cx(
-        'relative rounded-3xl bg-white px-6 pb-6 pt-10 text-center shadow-card ring-1 ring-black/5',
-        leader && 'sm:-mt-6 sm:pb-8 sm:pt-12 ring-moss-500/25 shadow-[0_24px_50px_-22px_rgba(0,128,55,0.4)]',
-      )}
+    <div className="inline-flex items-center gap-2 text-moss-600">
+      <Icon className="h-4 w-4" strokeWidth={2.2} />
+      <span className="text-[12px] font-bold uppercase tracking-[0.2em]">{children}</span>
+    </div>
+  )
+}
+
+function Underline({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 200 14" fill="none" preserveAspectRatio="none" aria-hidden>
+      <motion.path
+        d="M4 9C46 3 150 2 196 7"
+        stroke="currentColor"
+        strokeWidth={5}
+        strokeLinecap="round"
+        initial={{ pathLength: 0, opacity: 0 }}
+        whileInView={{ pathLength: 1, opacity: 1 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.7, delay: 0.25, ease: 'easeOut' }}
+      />
+    </svg>
+  )
+}
+
+function NavCard({ to, Icon, title, sub }: { to: string; Icon: typeof Trophy; title: string; sub: string }) {
+  return (
+    <Link
+      to={to}
+      className="group flex items-center gap-4 rounded-3xl bg-white p-5 shadow-card ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:ring-moss-500/25"
     >
-      <span
-        className={cx(
-          'absolute -top-5 left-1/2 grid h-11 w-11 -translate-x-1/2 place-items-center rounded-full text-sm font-bold',
-          leader ? 'bg-moss-600 text-white shadow-[0_10px_24px_-8px_rgba(0,128,55,0.8)]' : 'bg-white text-graphite shadow ring-1 ring-black/10',
-        )}
-      >
-        {leader ? <Trophy className="h-5 w-5" /> : rank}
+      <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-moss-600/10 text-moss-700">
+        <Icon className="h-[22px] w-[22px]" strokeWidth={1.9} />
       </span>
-      <div className="font-display text-5xl text-graphite tabular">{fmt(row.gesamt)}</div>
-      <div className="label-mono mt-0.5 text-[10px] text-graphite-soft">Punkte</div>
-      <div className="mx-auto mt-3 h-1 w-10 rounded-full" style={{ background: leader ? '#008037' : '#e31e24' }} />
-      <div className="mt-3 font-bold text-graphite">Klasse {row.name}</div>
-      {row.jahrgang != null && <div className="text-xs text-graphite-soft">Klasse {row.jahrgang}</div>}
+      <div className="min-w-0 flex-1">
+        <div className="font-bold text-graphite">{title}</div>
+        <div className="truncate text-sm text-graphite-soft">{sub}</div>
+      </div>
+      <ArrowRight className="h-5 w-5 shrink-0 text-graphite-soft/50 transition group-hover:translate-x-1 group-hover:text-moss-600" />
+    </Link>
+  )
+}
+
+function PodiumStage({ podium }: { podium: LeaderboardRow[] }) {
+  const plates = [
+    { row: podium[1], place: 2 as const, xName: 25, yName: 46, xPts: 25, yPts: 70 },
+    { row: podium[0], place: 1 as const, xName: 51, yName: 41, xPts: 51, yPts: 68 },
+    { row: podium[2], place: 3 as const, xName: 76, yName: 50.5, xPts: 76, yPts: 72.5 },
+  ]
+  return (
+    <motion.div {...inView} className="relative mx-auto mt-12 aspect-[147/107] w-full overflow-hidden rounded-[2rem] shadow-card ring-1 ring-black/5">
+      <img src="/podium.jpg" alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover" />
+      <div className="absolute inset-0" style={{ background: 'radial-gradient(58% 42% at 50% 4%, rgba(98,201,138,0.22), transparent 60%)' }} />
+      {plates.map((p) => (p.row ? <PodiumPlate key={p.row.team_id} row={p.row} place={p.place} xName={p.xName} yName={p.yName} xPts={p.xPts} yPts={p.yPts} /> : null))}
     </motion.div>
+  )
+}
+
+function PodiumPlate({
+  row,
+  place,
+  xName,
+  yName,
+  xPts,
+  yPts,
+}: {
+  row: LeaderboardRow
+  place: 1 | 2 | 3
+  xName: number
+  yName: number
+  xPts: number
+  yPts: number
+}) {
+  const top = place === 1
+  const delay = place === 1 ? 0.12 : place === 2 ? 0.24 : 0.36
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.82 }}
+        whileInView={{ opacity: 1, scale: 1 }}
+        viewport={{ once: true, margin: '-40px' }}
+        transition={{ type: 'spring', stiffness: 150, damping: 15, delay }}
+        className={cx(
+          'absolute -translate-x-1/2 -translate-y-1/2 font-display font-bold leading-none text-graphite [text-shadow:0_1px_10px_rgba(255,255,255,0.95),0_0_5px_rgba(255,255,255,0.9)]',
+          top ? 'text-3xl sm:text-5xl' : 'text-2xl sm:text-4xl',
+        )}
+        style={{ left: `${xName}%`, top: `${yName}%` }}
+      >
+        {row.name}
+      </motion.div>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.82 }}
+        whileInView={{ opacity: 1, scale: 1 }}
+        viewport={{ once: true, margin: '-40px' }}
+        transition={{ type: 'spring', stiffness: 150, damping: 16, delay: delay + 0.06 }}
+        className={cx(
+          'absolute -translate-x-1/2 -translate-y-1/2 font-display leading-none text-moss-600 tabular [text-shadow:0_1px_8px_rgba(255,255,255,0.9)]',
+          top ? 'text-xl sm:text-3xl' : 'text-lg sm:text-2xl',
+        )}
+        style={{ left: `${xPts}%`, top: `${yPts}%` }}
+      >
+        {fmt(row.gesamt)}
+      </motion.div>
+    </>
+  )
+}
+
+function ZeitItem({ z, connector }: { z: { time: string; title: string; desc: string }; connector: boolean }) {
+  return (
+    <li className="relative flex gap-4 pl-1">
+      <div className="relative flex flex-col items-center">
+        <span className="mt-1 grid h-3.5 w-3.5 place-items-center rounded-full bg-moss-600 ring-4 ring-moss-600/15" />
+        {connector && <span className="mt-1 w-px flex-1 bg-graphite/10" />}
+      </div>
+      <div className="-mt-0.5 pb-1">
+        <div className="flex items-baseline gap-2">
+          <span className="font-bold tabular text-graphite">{z.time}</span>
+          <span className="font-semibold text-graphite">{z.title}</span>
+        </div>
+        <p className="mt-0.5 text-sm text-graphite-soft">{z.desc}</p>
+      </div>
+    </li>
   )
 }
 

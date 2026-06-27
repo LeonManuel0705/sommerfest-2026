@@ -42,9 +42,9 @@ function ScrollToTop() {
 function AnimatedRoutes() {
   const location = useLocation()
   return (
-    <AnimatePresence mode="wait">
-      <motion.div key={location.pathname} variants={pageVariants} initial="hidden" animate="show" exit="exit">
-        <Suspense fallback={<Loading />}>
+    <Suspense fallback={<Loading />}>
+      <AnimatePresence mode="wait">
+        <motion.div key={location.pathname} variants={pageVariants} initial="hidden" animate="show" exit="exit">
           <Routes location={location}>
             <Route path="/" element={<Landing />} />
             <Route path="/rangliste" element={<Leaderboard />} />
@@ -60,9 +60,9 @@ function AnimatedRoutes() {
             <Route path="/qr" element={<QR />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </Suspense>
-      </motion.div>
-    </AnimatePresence>
+        </motion.div>
+      </AnimatePresence>
+    </Suspense>
   )
 }
 

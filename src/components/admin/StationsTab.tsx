@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
-import { Asterisk, ChevronDown, ChevronUp, Copy, KeyRound, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Asterisk, ChevronDown, ChevronUp, Copy, KeyRound, Pause, Play, Plus, Printer, RefreshCw, Trash2 } from 'lucide-react'
 import { createStation, deleteStation, setStationPin, updateStation } from '@/lib/api'
 import type { StationAdmin } from '@/lib/types'
 import { Badge, Button, GlassCard, TextInput } from '@/components/ui'
 import { StationIcon, STATION_ICON_NAMES } from '@/components/icons'
+import { StationQRSheet } from '@/components/StationQRSheet'
 import { spring } from '@/lib/motion'
 
 function randomToken() {
@@ -19,8 +20,20 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
   const [open, setOpen] = useState<string | null>(null)
   const [iconPicker, setIconPicker] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
+  const [printing, setPrinting] = useState(false)
 
   useEffect(() => setItems(stations), [stations])
+
+  useEffect(() => {
+    if (!printing) return
+    const t = window.setTimeout(() => window.print(), 80)
+    const reset = () => setPrinting(false)
+    window.addEventListener('afterprint', reset)
+    return () => {
+      window.clearTimeout(t)
+      window.removeEventListener('afterprint', reset)
+    }
+  }, [printing])
 
   const patch = async (id: string, p: Partial<StationAdmin>) => {
     setItems((arr) => arr.map((s) => (s.id === id ? { ...s, ...p } : s)))
@@ -39,10 +52,11 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
   }
 
   const changePin = async (s: StationAdmin) => {
-    const pin = prompt(`PIN für „${s.name}" setzen (Helfer brauchen sie zum Eintragen):`)
+    const pin = prompt(`PIN für „${s.name}" setzen (Helfer brauchen sie zum Eintragen):`, s.pin ?? '')
     if (pin === null) return
-    await setStationPin(s.id, pin.trim() || null)
-    setItems((arr) => arr.map((x) => (x.id === s.id ? { ...x, pin_hash: pin.trim() ? 'set' : null } : x)))
+    const val = pin.trim() || null
+    await setStationPin(s.id, val)
+    setItems((arr) => arr.map((x) => (x.id === s.id ? { ...x, pin_hash: val ? 'set' : null, pin: val } : x)))
   }
 
   const regen = async (s: StationAdmin) => {
@@ -67,6 +81,13 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
         </div>
         <Button onClick={add} disabled={!newName.trim()}>
           <Plus className="h-4 w-4" /> Hinzufügen
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-graphite-soft">{items.length} Stationen · QR + PIN je Station unten ausklappen</p>
+        <Button size="sm" variant="glass" onClick={() => setPrinting(true)}>
+          <Printer className="h-4 w-4" /> Alle QR-Codes drucken
         </Button>
       </div>
 
@@ -179,6 +200,20 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
                             <QRCodeSVG value={linkFor(s.token)} size={132} fgColor="#11261e" />
                           </div>
                           <code className="max-w-full truncate rounded-lg bg-white/70 px-2 py-1 text-xs text-graphite-soft">/s/{s.token}</code>
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="text-graphite-soft">PIN:</span>
+                            {s.pin ? (
+                              <button
+                                onClick={() => navigator.clipboard?.writeText(s.pin!)}
+                                title="PIN kopieren"
+                                className="rounded-lg bg-moss-500/12 px-2.5 py-1 font-bold tracking-wider text-moss-700 tabular transition hover:bg-moss-500/20"
+                              >
+                                {s.pin}
+                              </button>
+                            ) : (
+                              <span className="text-xs font-semibold text-graphite-soft/70">Leitung setzt selbst</span>
+                            )}
+                          </div>
                           <div className="flex gap-2">
                             <Button size="sm" variant="glass" onClick={() => navigator.clipboard?.writeText(linkFor(s.token))}>
                               <Copy className="h-4 w-4" /> Link kopieren
@@ -197,6 +232,8 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
           )
         })}
       </div>
+
+      {printing && <StationQRSheet stations={items} origin={window.location.origin} />}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { buildSchedule, computeFinalists, FINALS, VOLLEY_SCHIENEN, type VolleyMatch } from './volley'
 import type {
+  AppSettings,
   AuditEntry,
   LeaderboardRow,
   Score,
@@ -9,6 +10,17 @@ import type {
   StationSession,
   Team,
 } from './types'
+
+export async function fetchSettings(): Promise<AppSettings> {
+  const { data, error } = await supabase.from('settings').select('scoreboard_frozen').eq('id', 1).maybeSingle()
+  if (error) throw error
+  return { scoreboard_frozen: Boolean(data?.scoreboard_frozen) }
+}
+
+export async function setScoreboardFrozen(frozen: boolean): Promise<void> {
+  const { error } = await supabase.from('settings').update({ scoreboard_frozen: frozen, updated_at: new Date().toISOString() }).eq('id', 1)
+  if (error) throw error
+}
 
 export async function fetchTeams(): Promise<Team[]> {
   const { data, error } = await supabase.from('teams').select('*').order('sort')
@@ -293,6 +305,25 @@ export async function volleyLeaderSetTeams(
   teamB: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const { data, error } = await supabase.rpc('volley_set_teams', { p_token: token, p_pin: pin, p_id: id, p_team_a: teamA, p_team_b: teamB })
+  if (error) throw error
+  return data as { ok: boolean; error?: string }
+}
+
+export async function fetchVolleySchienen(): Promise<Record<number, string>> {
+  const { data, error } = await supabase.from('volley_schienen').select('schiene, zeit')
+  if (error) throw error
+  const out: Record<number, string> = {}
+  for (const r of data ?? []) out[r.schiene as number] = r.zeit as string
+  return out
+}
+
+export async function adminSetVolleySchiene(schiene: number, zeit: string): Promise<void> {
+  const { error } = await supabase.from('volley_schienen').update({ zeit, updated_at: new Date().toISOString() }).eq('schiene', schiene)
+  if (error) throw error
+}
+
+export async function volleyLeaderSetZeit(token: string, pin: string, schiene: number, zeit: string): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('volley_set_zeit', { p_token: token, p_pin: pin, p_schiene: schiene, p_zeit: zeit })
   if (error) throw error
   return data as { ok: boolean; error?: string }
 }

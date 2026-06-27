@@ -4,13 +4,16 @@ import { SiteFooter } from '@/components/site/SiteFooter'
 import { FireBars } from '@/components/FireBars'
 import { LivePill } from '@/components/ui'
 import { LottieLoop } from '@/components/Lottie'
+import { ScoreboardLocked } from '@/components/ScoreboardLocked'
 import barChart from '@/assets/lottie/bar-chart.json'
 import { useLiveData } from '@/lib/useLiveData'
+import { useScoreboardFrozen } from '@/lib/useSettings'
 import { computeJahrgangWertung, fmt } from '@/lib/format'
 import { fadeUp, stagger } from '@/lib/motion'
 
 export default function Leaderboard() {
   const { leaderboard, stations, loading, error, live } = useLiveData({ realtime: false, pollMs: 5000 })
+  const frozen = useScoreboardFrozen()
   const totalPunkte = leaderboard.reduce((a, r) => a + r.gesamt, 0)
   const aktiveStationen = stations.filter((s) => s.aktiv && s.pflicht).length
   const jahrgang = computeJahrgangWertung(leaderboard)
@@ -42,7 +45,11 @@ export default function Leaderboard() {
           ))}
         </motion.div>
 
-        {loading ? (
+        {frozen ? (
+          <div className="mt-8">
+            <ScoreboardLocked />
+          </div>
+        ) : loading ? (
           <div className="grid place-items-center py-16">
             <LottieLoop data={barChart} className="h-44 w-44" />
           </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AlertTriangle, Check, ChevronRight, LogOut, RefreshCw, SearchX, WifiOff } from 'lucide-react'
@@ -10,13 +10,16 @@ import { Button, EmblemLoader, GlassCard, Spinner, TextInput } from '@/component
 import { StationIcon } from '@/components/icons'
 import { cx, fmt } from '@/lib/format'
 import { spring } from '@/lib/motion'
+import { useLottie } from 'lottie-react'
 import { LottieOnce } from '@/components/Lottie'
 import checkGreen from '@/assets/lottie/check-green.json'
+import lockAnim from '@/assets/lottie/lock-green-tick.json'
 
 type Phase = 'loading' | 'notfound' | 'locked' | 'ready'
 type StationInfo = { id: string; name: string; icon: string; beschreibung: string | null; einheit: string | null; has_pin: boolean }
 
 const sessKey = (token: string) => `sportfest_session_${token}`
+const IDLE_LOGOUT_MS = 3 * 60 * 1000
 
 export default function StationHelper() {
   const { token = '' } = useParams()
@@ -30,6 +33,8 @@ export default function StationHelper() {
   const [loggingIn, setLoggingIn] = useState(false)
   const [values, setValues] = useState<Record<string, number>>({})
   const [editing, setEditing] = useState<string | null>(null)
+  const [unlocking, setUnlocking] = useState(false)
+  const [justLoggedOut, setJustLoggedOut] = useState(false)
 
   const doLogin = useCallback(
     async (tryPin: string, tryHelfer: string, fromStorage = false) => {
@@ -43,7 +48,8 @@ export default function StationHelper() {
           setHelfer(tryHelfer)
           setValues(Object.fromEntries(res.teams.map((t) => [t.id, t.punkte ?? 0])))
           sessionStorage.setItem(sessKey(token), JSON.stringify({ pin: tryPin, helfer: tryHelfer }))
-          setPhase('ready')
+          if (fromStorage) setPhase('ready')
+          else setUnlocking(true)
         } else if (!fromStorage) {
           setLoginError(res.error === 'wrong_pin' ? 'Falsche PIN.' : 'Station nicht gefunden.')
         } else {
@@ -129,12 +135,34 @@ export default function StationHelper() {
     }
   }, [session])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     sessionStorage.removeItem(sessKey(token))
     setSession(null)
     setPin('')
+    setUnlocking(false)
+    setJustLoggedOut(true)
     setPhase('locked')
-  }
+  }, [token])
+
+  useEffect(() => {
+    if (!session || unlocking) return
+    const onVisibility = () => {
+      if (document.hidden) logout()
+    }
+    let timer = window.setTimeout(logout, IDLE_LOGOUT_MS)
+    const reset = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(logout, IDLE_LOGOUT_MS)
+    }
+    const events: Array<keyof WindowEventMap> = ['pointerdown', 'keydown', 'touchstart']
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }))
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.clearTimeout(timer)
+      events.forEach((e) => window.removeEventListener(e, reset))
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [session, unlocking, logout])
 
   const editingTeam = useMemo(() => session?.teams.find((t) => t.id === editing) ?? null, [session, editing])
 
@@ -160,57 +188,34 @@ export default function StationHelper() {
     )
   }
 
-  if (phase === 'locked') {
+  if (phase === 'locked' || !session) {
     return (
-      <div className="grid min-h-dvh place-items-center p-6">
-        <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
-          <GlassCard solid className="w-[min(92vw,26rem)] p-8">
-            <div className="mb-6 text-center">
-              <div className="mx-auto mb-3 grid h-16 w-16 place-items-center rounded-2xl bg-moss-500/10 text-moss-600 hairline">
-                <StationIcon name={info?.icon} className="h-7 w-7" strokeWidth={1.8} />
-              </div>
-              <h1 className="font-display text-2xl font-bold">{info?.name}</h1>
-              {info?.beschreibung && <p className="mt-1 text-sm text-graphite-soft">{info.beschreibung}</p>}
-            </div>
-            {info?.has_pin === false ? (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  if (pin.trim() && pin === pinConfirm) void doSetPin(pin.trim(), helfer)
-                }}
-                className="space-y-3"
-              >
-                <p className="rounded-2xl bg-brass-400/10 px-4 py-2.5 text-sm text-brass-600">
-                  Diese Station hat noch keine PIN. Leg jetzt eine fest — <b>merkt sie euch</b>, ihr braucht sie zum Eintragen.
-                </p>
-                <TextInput label="Dein Name (optional)" placeholder="z.B. Leon" value={helfer} onChange={(e) => setHelfer(e.target.value)} autoComplete="off" />
-                <TextInput label="Neue Stations-PIN" inputMode="numeric" placeholder="••••" value={pin} onChange={(e) => setPin(e.target.value)} autoFocus />
-                <TextInput label="PIN wiederholen" inputMode="numeric" placeholder="••••" value={pinConfirm} onChange={(e) => setPinConfirm(e.target.value)} />
-                {pin && pinConfirm && pin !== pinConfirm && <p className="text-sm font-semibold text-crimson-600">Die PINs stimmen nicht überein.</p>}
-                {loginError && <p className="text-sm font-semibold text-crimson-600">{loginError}</p>}
-                <Button type="submit" size="lg" className="w-full" disabled={loggingIn || !pin.trim() || pin !== pinConfirm}>
-                  {loggingIn ? <Spinner className="h-5 w-5 border-white/30 border-t-white" /> : 'PIN festlegen & starten'}
-                </Button>
-              </form>
-            ) : (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  void doLogin(pin, helfer)
-                }}
-                className="space-y-3"
-              >
-                <TextInput label="Dein Name (optional)" placeholder="z.B. Leon" value={helfer} onChange={(e) => setHelfer(e.target.value)} autoComplete="off" />
-                <TextInput label="Stations-PIN" inputMode="numeric" placeholder="••••" value={pin} onChange={(e) => setPin(e.target.value)} autoFocus />
-                {loginError && <p className="text-sm font-semibold text-crimson-600">{loginError}</p>}
-                <Button type="submit" size="lg" className="w-full" disabled={loggingIn || !pin}>
-                  {loggingIn ? <Spinner className="h-5 w-5 border-white/30 border-t-white" /> : 'Station starten'}
-                </Button>
-              </form>
-            )}
-          </GlassCard>
-        </motion.div>
-      </div>
+      <LockCard
+        info={info}
+        helfer={helfer}
+        setHelfer={setHelfer}
+        pin={pin}
+        setPin={setPin}
+        pinConfirm={pinConfirm}
+        setPinConfirm={setPinConfirm}
+        loginError={loginError}
+        loggingIn={loggingIn}
+        unlocking={unlocking}
+        justLoggedOut={justLoggedOut}
+        onSubmitLogin={(e) => {
+          e.preventDefault()
+          if (helfer.trim() && pin) void doLogin(pin, helfer)
+        }}
+        onSubmitSetup={(e) => {
+          e.preventDefault()
+          if (helfer.trim() && pin.trim() && pin === pinConfirm) void doSetPin(pin.trim(), helfer)
+        }}
+        onUnlocked={() => {
+          setUnlocking(false)
+          setJustLoggedOut(false)
+          setPhase('ready')
+        }}
+      />
     )
   }
 
@@ -218,7 +223,12 @@ export default function StationHelper() {
   const einheit = station.einheit ?? 'Punkte'
 
   return (
-    <div className="mx-auto min-h-dvh max-w-2xl px-4 py-5">
+    <motion.div
+      className="mx-auto min-h-dvh max-w-2xl px-4 py-5"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.45, ease: [0.22, 0.61, 0.36, 1] }}
+    >
       <header className="sticky top-0 z-10 -mx-4 mb-4 flex items-center justify-between gap-3 bg-paper/70 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <span className="grid h-11 w-11 place-items-center rounded-2xl bg-moss-500/10 text-moss-600 hairline">
@@ -309,6 +319,118 @@ export default function StationHelper() {
           />
         )}
       </AnimatePresence>
+    </motion.div>
+  )
+}
+
+function LockCard({
+  info,
+  helfer,
+  setHelfer,
+  pin,
+  setPin,
+  pinConfirm,
+  setPinConfirm,
+  loginError,
+  loggingIn,
+  unlocking,
+  justLoggedOut,
+  onSubmitLogin,
+  onSubmitSetup,
+  onUnlocked,
+}: {
+  info: StationInfo | null
+  helfer: string
+  setHelfer: (v: string) => void
+  pin: string
+  setPin: (v: string) => void
+  pinConfirm: string
+  setPinConfirm: (v: string) => void
+  loginError: string | null
+  loggingIn: boolean
+  unlocking: boolean
+  justLoggedOut: boolean
+  onSubmitLogin: (e: FormEvent) => void
+  onSubmitSetup: (e: FormEvent) => void
+  onUnlocked: () => void
+}) {
+  const lockData = useMemo(() => JSON.parse(JSON.stringify(lockAnim)) as object, [])
+  const segRef = useRef<'rest' | 'close' | 'unlock'>('rest')
+  const lock = useLottie(
+    {
+      animationData: lockData,
+      autoplay: false,
+      loop: false,
+      onComplete: () => {
+        if (segRef.current === 'unlock') onUnlocked()
+      },
+    },
+    { width: 96, height: 96 },
+  )
+
+  useEffect(() => {
+    if (justLoggedOut) {
+      segRef.current = 'close'
+      lock.setSpeed(1.9)
+      lock.goToAndStop(60, true)
+      const t = window.setTimeout(() => lock.playSegments([60, 37], true), 200)
+      return () => window.clearTimeout(t)
+    }
+    segRef.current = 'rest'
+    lock.goToAndStop(37, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!unlocking) return
+    segRef.current = 'unlock'
+    lock.setSpeed(1.6)
+    lock.playSegments([37, 141], true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unlocking])
+
+  const needsSetup = info?.has_pin === false
+  const autoFocusPin = !justLoggedOut && typeof window !== 'undefined' && !window.matchMedia('(pointer: coarse)').matches
+
+  return (
+    <div className="grid min-h-dvh place-items-center p-6">
+      <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
+        <GlassCard solid className="w-[min(92vw,26rem)] p-8">
+          <div className="mb-6 text-center">
+            <div className="mx-auto mb-1 grid h-24 w-24 place-items-center">{lock.View}</div>
+            <h1 className="font-display text-2xl font-bold">{info?.name}</h1>
+            {info?.beschreibung && <p className="mt-1 text-sm text-graphite-soft">{info.beschreibung}</p>}
+          </div>
+          {unlocking ? (
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-3 text-center text-sm font-semibold text-moss-600">
+              Entsperrt …
+            </motion.p>
+          ) : needsSetup ? (
+            <form onSubmit={onSubmitSetup} className="space-y-3">
+              <p className="rounded-2xl bg-brass-400/10 px-4 py-2.5 text-sm text-brass-500">
+                Diese Station hat noch keine PIN. Leg jetzt eine fest — <b>merkt sie euch</b>, ihr braucht sie zum Eintragen.
+              </p>
+              <TextInput label="Dein Name" placeholder="z.B. Leon" value={helfer} onChange={(e) => setHelfer(e.target.value)} autoComplete="off" />
+              <TextInput label="Neue Stations-PIN" inputMode="numeric" placeholder="••••" value={pin} onChange={(e) => setPin(e.target.value)} autoFocus={autoFocusPin} />
+              <TextInput label="PIN wiederholen" inputMode="numeric" placeholder="••••" value={pinConfirm} onChange={(e) => setPinConfirm(e.target.value)} />
+              {pin && pinConfirm && pin !== pinConfirm && <p className="text-sm font-semibold text-crimson-600">Die PINs stimmen nicht überein.</p>}
+              {loginError && <p className="text-sm font-semibold text-crimson-600">{loginError}</p>}
+              <Button type="submit" size="lg" className="w-full" disabled={loggingIn || !helfer.trim() || !pin.trim() || pin !== pinConfirm}>
+                {loggingIn ? <Spinner className="h-5 w-5 border-white/30 border-t-white" /> : 'PIN festlegen & starten'}
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={onSubmitLogin} className="space-y-3">
+              <TextInput label="Dein Name" placeholder="z.B. Leon" value={helfer} onChange={(e) => setHelfer(e.target.value)} autoComplete="off" />
+              <TextInput label="Stations-PIN" inputMode="numeric" placeholder="••••" value={pin} onChange={(e) => setPin(e.target.value)} autoFocus={autoFocusPin} />
+              {loginError && <p className="text-sm font-semibold text-crimson-600">{loginError}</p>}
+              <Button type="submit" size="lg" className="w-full" disabled={loggingIn || !helfer.trim() || !pin}>
+                {loggingIn ? <Spinner className="h-5 w-5 border-white/30 border-t-white" /> : 'Station starten'}
+              </Button>
+            </form>
+          )}
+        </GlassCard>
+      </motion.div>
     </div>
   )
 }
@@ -328,6 +450,15 @@ function ScoreEditor({
 }) {
   const [raw, setRaw] = useState(String(current))
   const [saved, setSaved] = useState(false)
+  const [kb, setKb] = useState(0)
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const onResize = () => setKb(Math.max(0, window.innerHeight - vv.height))
+    onResize()
+    vv.addEventListener('resize', onResize)
+    return () => vv.removeEventListener('resize', onResize)
+  }, [])
   const parsed = Number.parseFloat(raw.replace(',', '.'))
   const value = Number.isFinite(parsed) ? parsed : 0
   const bump = (d: number) => setRaw(String(Math.max(0, Math.round((value + d) * 100) / 100)))
@@ -337,7 +468,13 @@ function ScoreEditor({
   }
 
   return (
-    <motion.div className="fixed inset-0 z-50 grid place-items-end sm:place-items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+    <motion.div
+      className="fixed inset-0 z-50 grid place-items-end sm:place-items-center"
+      style={{ paddingBottom: kb || undefined }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
       <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-sm" onClick={onClose} />
       <motion.div
         initial={{ y: 60, opacity: 0, scale: 0.98 }}

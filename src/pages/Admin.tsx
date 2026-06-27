@@ -3,7 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLottie } from 'lottie-react'
-import { Activity, LayoutGrid, ScrollText, Target, Users, Volleyball } from 'lucide-react'
+import { Activity, Gauge, LayoutGrid, ScrollText, Target, Users, Volleyball } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { fetchScores, fetchStationsAdmin, fetchTeams, signOut, takeAdminPrefetch } from '@/lib/api'
@@ -13,6 +13,7 @@ import { Button, EmblemLoader } from '@/components/ui'
 import { TeamsTab } from '@/components/admin/TeamsTab'
 import { StationsTab } from '@/components/admin/StationsTab'
 import { OverviewTab } from '@/components/admin/OverviewTab'
+import { StatusTab } from '@/components/admin/StatusTab'
 import { AuditTab } from '@/components/admin/AuditTab'
 import { VolleyTab } from '@/components/admin/VolleyTab'
 import { SystemTab } from '@/components/admin/SystemTab'
@@ -38,9 +39,10 @@ function AdminWatermark() {
   )
 }
 
-type Tab = 'overview' | 'teams' | 'stations' | 'volley' | 'audit' | 'system'
+type Tab = 'overview' | 'status' | 'teams' | 'stations' | 'volley' | 'audit' | 'system'
 const TABS: Array<{ id: Tab; label: string; Icon: LucideIcon }> = [
   { id: 'overview', label: 'Übersicht', Icon: LayoutGrid },
+  { id: 'status', label: 'Status', Icon: Gauge },
   { id: 'teams', label: 'Klassen', Icon: Users },
   { id: 'stations', label: 'Stationen', Icon: Target },
   { id: 'volley', label: 'Volleyball', Icon: Volleyball },
@@ -226,6 +228,8 @@ function AdminShell({
           </div>
         ) : tab === 'overview' ? (
           <OverviewTab teams={teams} stations={stations} scores={scores} reload={reload} />
+        ) : tab === 'status' ? (
+          <StatusTab teams={teams} stations={stations} scores={scores} />
         ) : tab === 'teams' ? (
           <TeamsTab teams={teams} reload={reload} />
         ) : tab === 'stations' ? (

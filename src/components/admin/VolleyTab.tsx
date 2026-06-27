@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { KeyRound, RotateCcw, Wand2 } from 'lucide-react'
-import { fetchVolleyMatches, fetchVolleyStation, fillVolleyFinals, generateVolleySchedule, resetVolley, setStationPin, setVolleyMatch } from '@/lib/api'
+import { adminSetVolleySchiene, fetchVolleyMatches, fetchVolleySchienen, fetchVolleyStation, fillVolleyFinals, generateVolleySchedule, resetVolley, setStationPin, setVolleyMatch } from '@/lib/api'
 import type { VolleyMatch } from '@/lib/volley'
 import { VolleyBoard, type VolleyMut } from '@/components/VolleyBoard'
 import { Button, EmblemLoader } from '@/components/ui'
@@ -11,11 +11,13 @@ type Station = { id: string; token: string; hasPin: boolean }
 export function VolleyTab() {
   const [matches, setMatches] = useState<VolleyMatch[] | null>(null)
   const [station, setStation] = useState<Station | null>(null)
+  const [zeiten, setZeiten] = useState<Record<number, string>>({})
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(() => {
     fetchVolleyMatches().then(setMatches).catch(() => setMatches([]))
     fetchVolleyStation().then(setStation).catch(() => setStation(null))
+    fetchVolleySchienen().then(setZeiten).catch(() => {})
   }, [])
   useEffect(load, [load])
 
@@ -23,6 +25,7 @@ export function VolleyTab() {
     setScore: (m, a, b, status) => setVolleyMatch(m.id, { score_a: a, score_b: b, status }),
     setTeams: (m, a, b) => setVolleyMatch(m.id, { team_a: a, team_b: b }),
     fillFinals: (ms) => fillVolleyFinals(ms),
+    setZeit: (schiene, zeit) => adminSetVolleySchiene(schiene, zeit),
   }
 
   const generate = async () => {
@@ -73,7 +76,7 @@ export function VolleyTab() {
               <RotateCcw className="h-4 w-4" /> Zurücksetzen
             </Button>
           </div>
-          <VolleyBoard matches={matches} reload={load} mut={mut} />
+          <VolleyBoard matches={matches} reload={load} mut={mut} zeiten={zeiten} />
         </>
       )}
     </div>

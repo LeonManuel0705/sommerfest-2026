@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { KeyRound, ShieldCheck } from 'lucide-react'
-import { fetchVolleyMatches, volleyLeaderSetMatch, volleyLeaderSetTeams, volleyLogin } from '@/lib/api'
+import { fetchVolleyMatches, fetchVolleySchienen, volleyLeaderSetMatch, volleyLeaderSetTeams, volleyLeaderSetZeit, volleyLogin } from '@/lib/api'
 import { computeFinalists, FINALS, VOLLEY_SCHIENEN, type VolleyMatch } from '@/lib/volley'
 import { VolleyBoard, type VolleyMut } from '@/components/VolleyBoard'
 import { Button, EmblemLoader, Spinner, TextInput } from '@/components/ui'
@@ -14,9 +14,11 @@ export default function VolleyLeiter() {
   const [checking, setChecking] = useState(true)
   const [error, setError] = useState('')
   const [matches, setMatches] = useState<VolleyMatch[] | null>(null)
+  const [zeiten, setZeiten] = useState<Record<number, string>>({})
 
   const load = useCallback(() => {
     fetchVolleyMatches().then(setMatches).catch(() => setMatches([]))
+    fetchVolleySchienen().then(setZeiten).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -74,6 +76,7 @@ export default function VolleyLeiter() {
         }
       }
     },
+    setZeit: (schiene, zeit) => volleyLeaderSetZeit(token, pin, schiene, zeit).then(() => undefined),
   }
 
   if (checking) {
@@ -141,7 +144,7 @@ export default function VolleyLeiter() {
             Der Spielplan wurde von der Orga noch nicht erstellt.
           </div>
         ) : (
-          <VolleyBoard matches={matches} reload={load} mut={mut} />
+          <VolleyBoard matches={matches} reload={load} mut={mut} zeiten={zeiten} />
         )}
       </main>
     </div>

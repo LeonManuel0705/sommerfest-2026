@@ -21,6 +21,11 @@ export type StationPublic = {
 export type StationAdmin = StationPublic & {
   token: string
   pin_hash: string | null
+  pin: string | null
+}
+
+export type AppSettings = {
+  scoreboard_frozen: boolean
 }
 
 export type Score = {

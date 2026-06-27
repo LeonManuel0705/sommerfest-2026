@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Trophy, Wand2 } from 'lucide-react'
+import { Clock, Trophy, Wand2 } from 'lucide-react'
 import { computeStandings, FINALS, VOLLEY_SCHIENEN, type VolleyMatch } from '@/lib/volley'
 import { cx } from '@/lib/format'
 
@@ -14,12 +14,26 @@ export type VolleyMut = {
   setScore: (m: VolleyMatch, scoreA: number | null, scoreB: number | null, status: VolleyMatch['status']) => Promise<void>
   setTeams: (m: VolleyMatch, a: string, b: string) => Promise<void>
   fillFinals: (matches: VolleyMatch[]) => Promise<void>
+  setZeit: (schiene: number, zeit: string) => Promise<void>
 }
 
-export function VolleyBoard({ matches, reload, mut }: { matches: VolleyMatch[]; reload: () => void; mut: VolleyMut }) {
+export function VolleyBoard({ matches, reload, mut, zeiten }: { matches: VolleyMatch[]; reload: () => void; mut: VolleyMut; zeiten: Record<number, string> }) {
   const [local, setLocal] = useState<VolleyMatch[]>(matches)
+  const [localZeit, setLocalZeit] = useState<Record<number, string>>(zeiten)
   const [busy, setBusy] = useState(false)
   useEffect(() => setLocal(matches), [matches])
+  useEffect(() => setLocalZeit(zeiten), [zeiten])
+
+  const commitZeit = async (schiene: number, raw: string) => {
+    const value = raw.trim()
+    if (!value || value === (localZeit[schiene] ?? '')) return
+    setLocalZeit((z) => ({ ...z, [schiene]: value }))
+    try {
+      await mut.setZeit(schiene, value)
+    } catch {
+      reload()
+    }
+  }
 
   const patch = (id: string, fields: Partial<VolleyMatch>) => setLocal((ms) => ms.map((m) => (m.id === id ? { ...m, ...fields } : m)))
 
@@ -84,7 +98,19 @@ export function VolleyBoard({ matches, reload, mut }: { matches: VolleyMatch[]; 
         const finals = local.filter((m) => m.phase === 'final' && m.schiene === s.schiene)
         return (
           <div key={s.schiene}>
-            <h3 className="font-display text-2xl text-graphite">{s.label}</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-display text-2xl text-graphite">{s.label}</h3>
+              <label className="flex items-center gap-2 text-sm text-graphite-soft">
+                <Clock className="h-4 w-4 text-moss-600" />
+                <input
+                  defaultValue={localZeit[s.schiene] ?? s.zeit}
+                  key={`z${s.schiene}:${localZeit[s.schiene] ?? s.zeit}`}
+                  onBlur={(e) => commitZeit(s.schiene, e.target.value)}
+                  aria-label={`Spielzeit ${s.label}`}
+                  className="w-44 rounded-lg bg-white px-3 py-2 text-center text-sm font-semibold text-graphite outline-none ring-1 ring-black/10 focus:ring-2 focus:ring-moss-400"
+                />
+              </label>
+            </div>
             <div className="mt-3 grid gap-3 lg:grid-cols-2">
               {Object.entries(s.gruppen).map(([g, teams]) => {
                 const gm = local.filter((m) => m.phase === 'gruppe' && m.schiene === s.schiene && m.gruppe === g)

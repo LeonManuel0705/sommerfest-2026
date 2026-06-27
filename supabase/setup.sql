@@ -42,6 +42,7 @@ create table stations (
   einheit       text,
   token         text not null unique default encode(gen_random_bytes(8), 'hex'),
   pin_hash      text,
+  pin           text,                                -- Klartext-PIN: NUR für Admins lesbar (RLS), nie in stations_public
   aktiv         boolean not null default true,
   pflicht       boolean not null default true,
   sort          int default 0,
@@ -179,8 +180,10 @@ create or replace function set_station_pin(p_station_id uuid, p_pin text)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 begin
   if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'not_authenticated'); end if;
-  update stations set pin_hash = case when p_pin is null or p_pin = '' then null
-    else crypt(p_pin, gen_salt('bf')) end where id = p_station_id;
+  update stations set
+    pin_hash = case when p_pin is null or p_pin = '' then null else crypt(p_pin, gen_salt('bf')) end,
+    pin      = case when p_pin is null or p_pin = '' then null else p_pin end
+  where id = p_station_id;
   return jsonb_build_object('ok', found);
 end; $$;
 
@@ -203,7 +206,7 @@ begin
   if not found then return jsonb_build_object('ok', false, 'error', 'station_not_found'); end if;
   if v.pin_hash is not null then return jsonb_build_object('ok', false, 'error', 'already_set'); end if;
   if p_pin is null or length(btrim(p_pin)) = 0 then return jsonb_build_object('ok', false, 'error', 'empty'); end if;
-  update stations set pin_hash = crypt(btrim(p_pin), gen_salt('bf')) where id = v.id;
+  update stations set pin_hash = crypt(btrim(p_pin), gen_salt('bf')), pin = btrim(p_pin) where id = v.id;
   return jsonb_build_object('ok', true);
 end; $$;
 revoke all on function station_set_pin(text, text) from public;
@@ -232,6 +235,25 @@ revoke all on function db_health() from public;
 grant execute on function db_health() to authenticated;
 
 -- ----------------------------------------------------------------------------
+--  GLOBALE EINSTELLUNGEN
+--  Siegerehrungs-Modus: Wertung öffentlich einfrieren (geheim halten) bis zur
+--  Siegerehrung, dann auf Knopfdruck enthüllen. Eine einzige Zeile (id = 1).
+-- ----------------------------------------------------------------------------
+drop table if exists settings cascade;
+create table settings (
+  id                int primary key default 1,
+  scoreboard_frozen boolean not null default false,
+  updated_at        timestamptz default now(),
+  constraint settings_singleton check (id = 1)
+);
+insert into settings (id) values (1);
+alter table settings enable row level security;
+create policy settings_select_all  on settings for select using (true);
+create policy settings_write_admin on settings for all
+  using (auth.uid() is not null) with check (auth.uid() is not null);
+grant select on settings to anon, authenticated;
+
+-- ----------------------------------------------------------------------------
 --  VOLLEYBALL-TURNIER
 -- ----------------------------------------------------------------------------
 create table volley_matches (
@@ -251,6 +273,22 @@ create table volley_matches (
 alter table volley_matches enable row level security;
 create policy volley_select_all  on volley_matches for select using (true);
 create policy volley_write_admin on volley_matches for all
+  using (auth.uid() is not null) with check (auth.uid() is not null);
+
+-- Schienen-Zeiten: werden auf der Website angezeigt und können von Admins
+-- UND der Turnierleitung live geändert werden (z.B. bei Verzögerungen).
+drop table if exists volley_schienen cascade;
+create table volley_schienen (
+  schiene    int primary key,
+  zeit       text not null,
+  updated_at timestamptz default now()
+);
+insert into volley_schienen (schiene, zeit) values
+  (1, '08:40 – 10:25 Uhr'),
+  (2, '10:50 – 12:50 Uhr');
+alter table volley_schienen enable row level security;
+create policy volley_schienen_select_all  on volley_schienen for select using (true);
+create policy volley_schienen_write_admin on volley_schienen for all
   using (auth.uid() is not null) with check (auth.uid() is not null);
 
 -- Turnierleitung: editiert das Volleyball-Turnier per Token + PIN der Station
@@ -295,13 +333,24 @@ begin
   return jsonb_build_object('ok', found);
 end; $$;
 
+create or replace function volley_set_zeit(
+  p_token text, p_pin text, p_schiene int, p_zeit text)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not volley_auth(p_token, p_pin) then return jsonb_build_object('ok', false, 'error', 'auth'); end if;
+  update volley_schienen set zeit = p_zeit, updated_at = now() where schiene = p_schiene;
+  return jsonb_build_object('ok', found);
+end; $$;
+
 revoke all on function volley_auth(text, text)                             from public;
 revoke all on function volley_login(text, text)                            from public;
 revoke all on function volley_set_match(text, text, uuid, int, int, text)  from public;
 revoke all on function volley_set_teams(text, text, uuid, text, text)      from public;
+revoke all on function volley_set_zeit(text, text, int, text)              from public;
 grant execute on function volley_login(text, text)                           to anon, authenticated;
 grant execute on function volley_set_match(text, text, uuid, int, int, text) to anon, authenticated;
 grant execute on function volley_set_teams(text, text, uuid, text, text)     to anon, authenticated;
+grant execute on function volley_set_zeit(text, text, int, text)             to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
 --  REALTIME (idempotent – kein Fehler beim erneuten Ausführen)
@@ -317,6 +366,12 @@ begin
   if not exists (select 1 from pg_publication_tables
                  where pubname='supabase_realtime' and schemaname='public' and tablename='volley_matches')
   then alter publication supabase_realtime add table volley_matches; end if;
+  if not exists (select 1 from pg_publication_tables
+                 where pubname='supabase_realtime' and schemaname='public' and tablename='volley_schienen')
+  then alter publication supabase_realtime add table volley_schienen; end if;
+  if not exists (select 1 from pg_publication_tables
+                 where pubname='supabase_realtime' and schemaname='public' and tablename='settings')
+  then alter publication supabase_realtime add table settings; end if;
 end $$;
 
 -- ----------------------------------------------------------------------------

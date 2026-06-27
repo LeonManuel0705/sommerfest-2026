@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Crown, Home, Maximize2, Minimize2 } from 'lucide-react'
 import { useLiveData } from '@/lib/useLiveData'
+import { useScoreboardFrozen } from '@/lib/useSettings'
 import { FireBars } from '@/components/FireBars'
+import { ScoreboardLocked } from '@/components/ScoreboardLocked'
 import { ConfettiBurst } from '@/components/ConfettiBurst'
 import { computeJahrgangWertung } from '@/lib/format'
 import { LottieLoop, LottieOnce } from '@/components/Lottie'
@@ -14,16 +16,24 @@ type View = 'klassen' | 'jahrgang'
 
 export default function Beamer() {
   const { leaderboard, live } = useLiveData()
+  const frozen = useScoreboardFrozen()
   const [fs, setFs] = useState(false)
   const [flash, setFlash] = useState(0)
   const [lead, setLead] = useState<{ n: number; name: string } | null>(null)
   const [view, setView] = useState<View>('klassen')
   const leaderRef = useRef<string | null>(null)
+  const wasFrozen = useRef(frozen)
+
+  useEffect(() => {
+    if (wasFrozen.current && !frozen) setFlash((f) => f + 1)
+    wasFrozen.current = frozen
+  }, [frozen])
 
   const shown = leaderboard.slice(0, 12)
   const jahrgang = useMemo(() => computeJahrgangWertung(leaderboard), [leaderboard])
 
   useEffect(() => {
+    if (frozen) return
     const leader = leaderboard[0]
     if (!leader || leader.gesamt === 0) return
     if (leaderRef.current && leaderRef.current !== leader.team_id) {
@@ -31,7 +41,7 @@ export default function Beamer() {
       setLead((p) => ({ n: (p?.n ?? 0) + 1, name: leader.name }))
     }
     leaderRef.current = leader.team_id
-  }, [leaderboard])
+  }, [leaderboard, frozen])
 
   useEffect(() => {
     if (!lead) return
@@ -142,7 +152,9 @@ export default function Beamer() {
       </header>
 
       <div className="relative z-10 mx-auto max-w-6xl">
-        {rows.length > 0 ? (
+        {frozen ? (
+          <ScoreboardLocked />
+        ) : rows.length > 0 ? (
           <div className="overflow-x-auto no-scrollbar">
             <FireBars key={view} rows={rows} big chartH={500} />
           </div>
