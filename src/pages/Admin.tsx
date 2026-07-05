@@ -3,7 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLottie } from 'lottie-react'
-import { Activity, Gauge, LayoutGrid, ScrollText, Target, Users, Volleyball } from 'lucide-react'
+import { Activity, Gauge, LayoutGrid, MessageSquareHeart, ScrollText, Target, Users, Volleyball } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { fetchScores, fetchStationsAdmin, fetchTeams, signOut, takeAdminPrefetch } from '@/lib/api'
@@ -15,6 +15,7 @@ import { StationsTab } from '@/components/admin/StationsTab'
 import { OverviewTab } from '@/components/admin/OverviewTab'
 import { StatusTab } from '@/components/admin/StatusTab'
 import { AuditTab } from '@/components/admin/AuditTab'
+import { FeedbackTab } from '@/components/admin/FeedbackTab'
 import { VolleyTab } from '@/components/admin/VolleyTab'
 import { SystemTab } from '@/components/admin/SystemTab'
 import { cx } from '@/lib/format'
@@ -39,13 +40,14 @@ function AdminWatermark() {
   )
 }
 
-type Tab = 'overview' | 'status' | 'teams' | 'stations' | 'volley' | 'audit' | 'system'
+type Tab = 'overview' | 'status' | 'teams' | 'stations' | 'volley' | 'feedback' | 'audit' | 'system'
 const TABS: Array<{ id: Tab; label: string; Icon: LucideIcon }> = [
   { id: 'overview', label: 'Übersicht', Icon: LayoutGrid },
   { id: 'status', label: 'Status', Icon: Gauge },
   { id: 'teams', label: 'Klassen', Icon: Users },
   { id: 'stations', label: 'Stationen', Icon: Target },
   { id: 'volley', label: 'Volleyball', Icon: Volleyball },
+  { id: 'feedback', label: 'Feedback', Icon: MessageSquareHeart },
   { id: 'audit', label: 'Protokoll', Icon: ScrollText },
   { id: 'system', label: 'System', Icon: Activity },
 ]
@@ -236,6 +238,8 @@ function AdminShell({
           <StationsTab stations={stations} reload={reload} />
         ) : tab === 'volley' ? (
           <VolleyTab />
+        ) : tab === 'feedback' ? (
+          <FeedbackTab />
         ) : tab === 'audit' ? (
           <AuditTab teams={teams} stations={stations} />
         ) : (

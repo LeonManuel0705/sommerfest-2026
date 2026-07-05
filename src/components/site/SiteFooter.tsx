@@ -9,6 +9,7 @@ export function SiteFooter() {
           <span>Sommerfest 2026 · Ernst-Haeckel-Gymnasium Werder (Havel)</span>
         </div>
         <div className="flex gap-6">
+          <Link to="/feedback" className="transition hover:text-graphite">Feedback</Link>
           <Link to="/impressum" className="transition hover:text-graphite">Impressum</Link>
           <Link to="/datenschutz" className="transition hover:text-graphite">Datenschutz</Link>
         </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Printer } from 'lucide-react'
+import { PrintPortal } from '@/components/PrintPortal'
 
 export default function QR() {
   const [url, setUrl] = useState('')
@@ -35,6 +36,21 @@ export default function QR() {
           <Printer className="h-4 w-4" /> Plakat drucken
         </button>
       </div>
+
+      <PrintPortal>
+        <div className="flex min-h-[277mm] flex-col items-center justify-center bg-white px-[20mm] py-[16mm] text-center text-black">
+          <img src="/ehg-logo.png" alt="" className="h-20 w-20 object-contain" />
+          <p className="mt-5 text-sm font-bold uppercase tracking-[0.2em]">Ernst-Haeckel-Gymnasium · 7. Juli 2026</p>
+          <h1 className="mt-3 font-display text-7xl font-bold">Sommerfest 2026</h1>
+          <p className="mt-4 text-2xl">Scanne den Code für den Live-Punktestand</p>
+          {url && (
+            <div className="mt-10 rounded-3xl border-2 border-black/15 p-8">
+              <QRCodeSVG value={url} size={340} level="M" fgColor="#000000" bgColor="#ffffff" />
+            </div>
+          )}
+          <p className="mt-6 text-xl font-bold">{url.replace(/^https?:\/\//, '')}</p>
+        </div>
+      </PrintPortal>
     </div>
   )
 }

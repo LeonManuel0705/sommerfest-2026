@@ -22,6 +22,8 @@ export type StationAdmin = StationPublic & {
   token: string
   pin_hash: string | null
   pin: string | null
+  start_pin: string | null
+  start_pin_hash: string | null
 }
 
 export type AppSettings = {
@@ -56,6 +58,37 @@ export type AuditEntry = {
   alt: number | null
   neu: number | null
   akteur: string | null
+  created_at: string
+}
+
+export type FeedbackRolle = 'schueler' | 'lehrkraft' | 'gast'
+export type FeedbackLehrerRolle = 'station' | 'begleitung' | 'dabei'
+export type FeedbackEssen = 'lecker' | 'okay' | 'nicht-so' | 'nicht-da'
+export type FeedbackVolley = 'gespielt' | 'zugeschaut' | 'verpasst'
+export type FeedbackOrga = 'rund' | 'okay' | 'chaotisch'
+export type FeedbackLaenge = 'zu-kurz' | 'genau-richtig' | 'zu-lang'
+export type FeedbackWebsite = 'top' | 'ausbaufaehig' | 'nicht-genutzt'
+export type FeedbackWieder = 'ja' | 'mit-aenderungen' | 'nein'
+
+export type FeedbackEntry = {
+  id: string
+  rolle: FeedbackRolle | null
+  klasse: string | null
+  lehrer_rolle: FeedbackLehrerRolle | null
+  rating: number
+  highlights: string[]
+  kritik: string[]
+  beste_station: string | null
+  essen: FeedbackEssen | null
+  essen_detail: string[]
+  volleyball: FeedbackVolley | null
+  orga: FeedbackOrga | null
+  orga_detail: string[]
+  laenge: FeedbackLaenge | null
+  website: FeedbackWebsite | null
+  website_detail: string[]
+  wieder: FeedbackWieder | null
+  kommentar: string | null
   created_at: string
 }
 

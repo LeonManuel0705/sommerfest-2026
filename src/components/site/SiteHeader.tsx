@@ -13,6 +13,7 @@ const NAV: NavItem[] = [
   { label: 'Lageplan', to: '/lageplan' },
   { label: 'Zeitreise', to: '/zeitreise' },
   { label: 'Scoreboard', to: '/rangliste' },
+  { label: 'Feedback', to: '/feedback' },
 ]
 
 export function SiteHeader() {

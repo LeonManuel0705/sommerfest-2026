@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Clock, Trophy, Wand2 } from 'lucide-react'
 import { computeStandings, FINALS, VOLLEY_SCHIENEN, type VolleyMatch } from '@/lib/volley'
@@ -21,7 +21,14 @@ export function VolleyBoard({ matches, reload, mut, zeiten }: { matches: VolleyM
   const [local, setLocal] = useState<VolleyMatch[]>(matches)
   const [localZeit, setLocalZeit] = useState<Record<number, string>>(zeiten)
   const [busy, setBusy] = useState(false)
-  useEffect(() => setLocal(matches), [matches])
+  // Während aktiv getippt wird oder ein Speichern unterwegs ist, darf der 5-Sekunden-Poll
+  // den lokalen Stand NICHT überschreiben — sonst gehen Eingaben verloren oder ein stale
+  // Wert wird zurückgeschrieben (löscht z.B. den gerade eingetragenen Satz).
+  const focusRef = useRef(false)
+  const inflightRef = useRef(0)
+  useEffect(() => {
+    if (!focusRef.current && inflightRef.current === 0) setLocal(matches)
+  }, [matches])
   useEffect(() => setLocalZeit(zeiten), [zeiten])
 
   const commitZeit = async (schiene: number, raw: string) => {
@@ -38,25 +45,32 @@ export function VolleyBoard({ matches, reload, mut, zeiten }: { matches: VolleyM
   const patch = (id: string, fields: Partial<VolleyMatch>) => setLocal((ms) => ms.map((m) => (m.id === id ? { ...m, ...fields } : m)))
 
   const commitScore = async (m: VolleyMatch, side: 'a' | 'b', raw: string) => {
+    focusRef.current = false
     const parsed = raw.trim() === '' ? null : Number.parseInt(raw, 10)
     const value = parsed == null || Number.isNaN(parsed) ? null : parsed
     if (m[side === 'a' ? 'score_a' : 'score_b'] === value) return
     const scoreA = side === 'a' ? value : m.score_a
     const scoreB = side === 'b' ? value : m.score_b
     patch(m.id, { score_a: scoreA, score_b: scoreB })
+    inflightRef.current++
     try {
       await mut.setScore(m, scoreA, scoreB, m.status)
     } catch {
       reload()
+    } finally {
+      inflightRef.current--
     }
   }
 
   const setStatus = async (m: VolleyMatch, status: VolleyMatch['status']) => {
     patch(m.id, { status })
+    inflightRef.current++
     try {
       await mut.setScore(m, m.score_a, m.score_b, status)
     } catch {
       reload()
+    } finally {
+      inflightRef.current--
     }
   }
 
@@ -64,10 +78,13 @@ export function VolleyBoard({ matches, reload, mut, zeiten }: { matches: VolleyM
     const teamA = side === 'a' ? value : m.team_a
     const teamB = side === 'b' ? value : m.team_b
     patch(m.id, { team_a: teamA, team_b: teamB })
+    inflightRef.current++
     try {
       await mut.setTeams(m, teamA, teamB)
     } catch {
       reload()
+    } finally {
+      inflightRef.current--
     }
   }
 
@@ -130,7 +147,7 @@ export function VolleyBoard({ matches, reload, mut, zeiten }: { matches: VolleyM
                     </div>
                     <div className="mt-3 space-y-1.5 border-t border-graphite/[0.06] pt-3">
                       {gm.map((m) => (
-                        <MatchRow key={m.id} m={m} onScore={commitScore} onStatus={setStatus} />
+                        <MatchRow key={m.id} m={m} onScore={commitScore} onStatus={setStatus} onFieldFocus={() => (focusRef.current = true)} />
                       ))}
                     </div>
                   </div>
@@ -146,7 +163,7 @@ export function VolleyBoard({ matches, reload, mut, zeiten }: { matches: VolleyM
                 {FINALS.map((f) => {
                   const m = finals.find((x) => x.platz === f.platz)
                   if (!m) return null
-                  return <MatchRow key={m.id} m={m} label={`${f.titel} · ${f.sub}`} klassen={klassen} onScore={commitScore} onStatus={setStatus} onTeam={setTeam} />
+                  return <MatchRow key={m.id} m={m} label={`${f.titel} · ${f.sub}`} klassen={klassen} onScore={commitScore} onStatus={setStatus} onTeam={setTeam} onFieldFocus={() => (focusRef.current = true)} />
                 })}
               </div>
             </div>
@@ -164,6 +181,7 @@ function MatchRow({
   onScore,
   onStatus,
   onTeam,
+  onFieldFocus,
 }: {
   m: VolleyMatch
   label?: string
@@ -171,6 +189,7 @@ function MatchRow({
   onScore: (m: VolleyMatch, side: 'a' | 'b', raw: string) => void
   onStatus: (m: VolleyMatch, status: VolleyMatch['status']) => void
   onTeam?: (m: VolleyMatch, side: 'a' | 'b', value: string) => void
+  onFieldFocus?: () => void
 }) {
   return (
     <motion.div layout className={cx('rounded-xl px-2 py-1.5', m.status === 'live' ? 'bg-moss-600/10' : 'bg-paper')}>
@@ -181,6 +200,7 @@ function MatchRow({
           inputMode="numeric"
           defaultValue={m.score_a ?? ''}
           key={`a${m.id}:${m.score_a ?? ''}`}
+          onFocus={onFieldFocus}
           onBlur={(e) => onScore(m, 'a', e.target.value)}
           className="w-12 rounded-lg bg-white px-1 py-2 text-center text-base tabular outline-none ring-1 ring-black/10 focus:ring-2 focus:ring-moss-400"
         />
@@ -189,6 +209,7 @@ function MatchRow({
           inputMode="numeric"
           defaultValue={m.score_b ?? ''}
           key={`b${m.id}:${m.score_b ?? ''}`}
+          onFocus={onFieldFocus}
           onBlur={(e) => onScore(m, 'b', e.target.value)}
           className="w-12 rounded-lg bg-white px-1 py-2 text-center text-base tabular outline-none ring-1 ring-black/10 focus:ring-2 focus:ring-moss-400"
         />

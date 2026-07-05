@@ -64,7 +64,8 @@ export function useLiveData(opts?: { realtime?: boolean; pollMs?: number }) {
       const lb = await fetchLeaderboard()
       if (mounted.current) setState((s) => ({ ...s, polled: sortLb(lb), live: true, loading: false, error: null }))
     } catch (e) {
-      if (mounted.current) setState((s) => ({ ...s, loading: false, error: (e as Error).message }))
+      // Netz-Blip: bestehende Daten stehen lassen, nur beim allerersten Laden als Fehler zeigen.
+      if (mounted.current) setState((s) => ({ ...s, loading: false, error: s.polled === null ? (e as Error).message : null, live: false }))
     }
   }, [])
 
@@ -98,14 +99,22 @@ export function useLiveData(opts?: { realtime?: boolean; pollMs?: number }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, reloadScores)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, reloadTeams)
       .subscribe((status) => {
-        if (mounted.current) setState((s) => ({ ...s, live: status === 'SUBSCRIBED' }))
+        if (!mounted.current) return
+        setState((s) => ({ ...s, live: status === 'SUBSCRIBED' }))
+        // Nach (Wieder-)Verbindung alles neu laden — sonst fehlen Scores, die
+        // während einer Trennung reinkamen (z.B. unbeaufsichtigter Beamer).
+        if (status === 'SUBSCRIBED') loadAll()
       })
 
+    // Sicherheitsnetz: Falls das WLAN den WebSocket kappt (Schul-WLAN/OctoGate),
+    // hält ein langsames Polling den Stand trotzdem aktuell.
+    const safetyId = window.setInterval(loadAll, 30000)
     const onFocus = () => loadAll()
     window.addEventListener('focus', onFocus)
 
     return () => {
       mounted.current = false
+      window.clearInterval(safetyId)
       window.removeEventListener('focus', onFocus)
       supabase.removeChannel(channel)
     }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
 import { Asterisk, ChevronDown, ChevronUp, Copy, KeyRound, Pause, Play, Plus, Printer, RefreshCw, Trash2 } from 'lucide-react'
-import { createStation, deleteStation, setStationPin, updateStation } from '@/lib/api'
+import { createStation, deleteStation, setStationPin, setStationStartPin, updateStation } from '@/lib/api'
 import type { StationAdmin } from '@/lib/types'
 import { Badge, Button, GlassCard, TextInput } from '@/components/ui'
 import { StationIcon, STATION_ICON_NAMES } from '@/components/icons'
@@ -59,6 +59,18 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
     setItems((arr) => arr.map((x) => (x.id === s.id ? { ...x, pin_hash: val ? 'set' : null, pin: val } : x)))
   }
 
+  const changeStartPin = async (s: StationAdmin) => {
+    const input = prompt(
+      `Start-PIN für „${s.name}" — die braucht die Stationsleitung, um ihre PIN festzulegen/zu ändern.\nLeer lassen = neue zufällige Start-PIN generieren:`,
+      s.start_pin ?? '',
+    )
+    if (input === null) return
+    const res = await setStationStartPin(s.id, input.trim() || null)
+    if (res.ok && res.start_pin) {
+      setItems((arr) => arr.map((x) => (x.id === s.id ? { ...x, start_pin: res.start_pin!, start_pin_hash: 'set' } : x)))
+    }
+  }
+
   const regen = async (s: StationAdmin) => {
     if (!confirm('Neuen Link/QR erzeugen? Der alte QR-Code funktioniert danach nicht mehr.')) return
     await patch(s.id, { token: randomToken() })
@@ -86,9 +98,14 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-graphite-soft">{items.length} Stationen · QR + PIN je Station unten ausklappen</p>
-        <Button size="sm" variant="glass" onClick={() => setPrinting(true)}>
-          <Printer className="h-4 w-4" /> Alle QR-Codes drucken
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="glass" onClick={reload}>
+            <RefreshCw className="h-4 w-4" /> Aktualisieren
+          </Button>
+          <Button size="sm" variant="glass" onClick={() => setPrinting(true)}>
+            <Printer className="h-4 w-4" /> Alle QR-Codes drucken
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-2.5">
@@ -211,8 +228,29 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
                                 {s.pin}
                               </button>
                             ) : (
-                              <span className="text-xs font-semibold text-graphite-soft/70">Leitung setzt selbst</span>
+                              <span className="text-xs font-semibold text-graphite-soft/70">Leitung setzt mit Start-PIN</span>
                             )}
+                          </div>
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="text-graphite-soft">Start-PIN:</span>
+                            {s.start_pin ? (
+                              <button
+                                onClick={() => navigator.clipboard?.writeText(s.start_pin!)}
+                                title="Start-PIN kopieren"
+                                className="rounded-lg bg-brass-400/15 px-2.5 py-1 font-bold tracking-wider text-brass-500 tabular transition hover:bg-brass-400/25"
+                              >
+                                {s.start_pin}
+                              </button>
+                            ) : (
+                              <span className="text-xs font-semibold text-graphite-soft/70">—</span>
+                            )}
+                            <button
+                              onClick={() => changeStartPin(s)}
+                              title="Start-PIN ändern / neu generieren"
+                              className="grid h-8 w-8 place-items-center rounded-lg text-graphite-soft transition hover:bg-graphite/[0.06] hover:text-graphite"
+                            >
+                              <KeyRound className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                           <div className="flex gap-2">
                             <Button size="sm" variant="glass" onClick={() => navigator.clipboard?.writeText(linkFor(s.token))}>

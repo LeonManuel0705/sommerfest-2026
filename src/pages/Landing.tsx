@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLottie } from 'lottie-react'
 import rewardAnim from '@/assets/lottie/reward-light.json'
-import { ArrowRight, Cake, CalendarDays, ChevronRight, Clock, CupSoda, Flag, Flame, History, Info, Lock, MapPin, MonitorPlay, Sprout, TrendingUp, Trophy, Volleyball } from 'lucide-react'
+import { ArrowRight, Cake, CalendarDays, ChevronRight, Clock, CupSoda, Flag, Flame, History, Info, Lock, MapPin, MessagesSquare, MonitorPlay, Sprout, TrendingUp, Trophy, Volleyball } from 'lucide-react'
 import { SiteHeader } from '@/components/site/SiteHeader'
 import { SiteFooter } from '@/components/site/SiteFooter'
 import { useLiveData } from '@/lib/useLiveData'
@@ -312,6 +312,26 @@ export default function Landing() {
             className="inline-flex items-center gap-2 rounded-full bg-moss-600 px-7 py-4 text-[15px] font-semibold text-white shadow-[0_14px_34px_-12px_rgba(0,128,55,0.7)] transition hover:bg-moss-700"
           >
             Zum Live-Scoreboard <ArrowRight className="h-4 w-4" />
+          </Link>
+        </motion.div>
+      </section>
+
+      <section className="border-t border-graphite/[0.06] bg-white py-16">
+        <motion.div {...inView} className="mx-auto flex max-w-5xl flex-col items-center gap-6 px-5 text-center sm:px-8">
+          <div>
+            <div className="flex justify-center">
+              <Kicker Icon={MessagesSquare}>Eure Meinung</Kicker>
+            </div>
+            <h2 className="mt-3 font-display text-4xl text-graphite sm:text-5xl">Sag uns, wie&apos;s war</h2>
+            <p className="mx-auto mt-3 max-w-xl text-graphite-soft">
+              Ein paar kurze Fragen, komplett anonym — dein Feedback landet direkt bei der Orga vom Jahrgang 11.
+            </p>
+          </div>
+          <Link
+            to="/feedback"
+            className="inline-flex items-center gap-2 rounded-full bg-moss-600 px-7 py-4 text-[15px] font-semibold text-white shadow-[0_14px_34px_-12px_rgba(0,128,55,0.7)] transition hover:bg-moss-700"
+          >
+            Feedback geben <ArrowRight className="h-4 w-4" />
           </Link>
         </motion.div>
       </section>

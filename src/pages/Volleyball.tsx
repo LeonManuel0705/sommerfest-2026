@@ -288,7 +288,12 @@ function GroupCard({ gruppe, teams, matches }: { gruppe: string; teams: string[]
 function FinalsColumn({ finals, className }: { finals: VolleyMatch[]; className?: string }) {
   const byPlatz = (p: number) => finals.find((m) => m.platz === p)
   const f1 = byPlatz(1)
-  const champ = f1 && f1.status === 'fertig' && f1.score_a != null && f1.score_b != null ? (f1.score_a >= f1.score_b ? f1.team_a : f1.team_b) : null
+  const champ =
+    f1 && f1.status === 'fertig' && f1.score_a != null && f1.score_b != null && f1.score_a !== f1.score_b
+      ? f1.score_a > f1.score_b
+        ? f1.team_a
+        : f1.team_b
+      : null
 
   return (
     <motion.div
@@ -313,16 +318,18 @@ function FinalsColumn({ finals, className }: { finals: VolleyMatch[]; className?
           const m = byPlatz(f.platz)
           if (!m) return null
           const done = m.status === 'fertig' && m.score_a != null && m.score_b != null
-          const aWin = done && (m.score_a ?? 0) >= (m.score_b ?? 0)
+          const tie = done && m.score_a === m.score_b
+          const aWin = done && !tie && (m.score_a ?? 0) > (m.score_b ?? 0)
+          const bWin = done && !tie && (m.score_b ?? 0) > (m.score_a ?? 0)
           return (
             <div key={f.platz} className={cx('rounded-2xl p-3 ring-1', m.status === 'live' ? 'bg-moss-600/10 ring-moss-500/30' : 'bg-white ring-black/5')}>
               <div className="label-mono text-[10px] text-brass-500">
                 {f.titel} · {f.sub}
               </div>
               <div className="mt-2 flex items-center justify-between gap-2 text-sm">
-                <span className={cx('min-w-0 flex-1 truncate font-bold', done && aWin ? 'text-moss-700' : 'text-graphite')}>{m.team_a ?? '—'}</span>
+                <span className={cx('min-w-0 flex-1 truncate font-bold', aWin ? 'text-moss-700' : 'text-graphite')}>{m.team_a ?? '—'}</span>
                 <span className="shrink-0 font-bold tabular text-graphite">{done ? `${m.score_a}:${m.score_b}` : 'vs'}</span>
-                <span className={cx('min-w-0 flex-1 truncate text-right font-bold', done && !aWin ? 'text-moss-700' : 'text-graphite')}>{m.team_b ?? '—'}</span>
+                <span className={cx('min-w-0 flex-1 truncate text-right font-bold', bWin ? 'text-moss-700' : 'text-graphite')}>{m.team_b ?? '—'}</span>
               </div>
               {m.status === 'live' && <div className="mt-1 label-mono text-[9px] text-moss-700">live</div>}
             </div>

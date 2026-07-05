@@ -3,9 +3,7 @@ import { SiteHeader } from '@/components/site/SiteHeader'
 import { SiteFooter } from '@/components/site/SiteFooter'
 import { FireBars } from '@/components/FireBars'
 import { LivePill } from '@/components/ui'
-import { LottieLoop } from '@/components/Lottie'
 import { ScoreboardLocked } from '@/components/ScoreboardLocked'
-import barChart from '@/assets/lottie/bar-chart.json'
 import { useLiveData } from '@/lib/useLiveData'
 import { useScoreboardFrozen } from '@/lib/useSettings'
 import { computeJahrgangWertung, fmt } from '@/lib/format'
@@ -39,7 +37,11 @@ export default function Leaderboard() {
         <motion.div initial="hidden" animate="show" variants={stagger} className="mt-7 grid grid-cols-3 gap-3">
           {stats.map((s) => (
             <motion.div key={s.label} variants={fadeUp} className="rounded-3xl bg-white px-3 py-4 text-center shadow-card ring-1 ring-black/5">
-              <div className="font-display text-2xl text-graphite tabular tabular-nums tracking-tight sm:text-3xl">{s.value}</div>
+              {loading ? (
+                <div className="mx-auto h-8 w-14 animate-pulse rounded-lg bg-graphite/[0.07] sm:h-9" />
+              ) : (
+                <div className="font-display text-2xl text-graphite tabular tabular-nums tracking-tight sm:text-3xl">{s.value}</div>
+              )}
               <div className="label-mono mt-0.5 text-[9px] text-graphite-soft">{s.label}</div>
             </motion.div>
           ))}
@@ -50,9 +52,7 @@ export default function Leaderboard() {
             <ScoreboardLocked />
           </div>
         ) : loading ? (
-          <div className="grid place-items-center py-16">
-            <LottieLoop data={barChart} className="h-44 w-44" />
-          </div>
+          <ScoreboardSkeleton />
         ) : error ? (
           <div className="mt-8 rounded-3xl bg-white p-6 text-center text-crimson-500 shadow-card ring-1 ring-black/5">Fehler: {error}</div>
         ) : leaderboard.length === 0 ? (
@@ -83,6 +83,26 @@ export default function Leaderboard() {
         )}
       </main>
       <SiteFooter />
+    </div>
+  )
+}
+
+const SKELETON_HEIGHTS = [58, 34, 72, 24, 46, 88, 38, 64, 28, 52, 78, 42, 60, 32, 48, 68, 22, 56, 40, 74, 30, 50]
+
+function ScoreboardSkeleton() {
+  return (
+    <div className="mt-8 rounded-3xl bg-white p-6 shadow-card ring-1 ring-black/5">
+      <div className="flex h-[340px] items-end gap-1.5 sm:gap-2">
+        {SKELETON_HEIGHTS.map((h, i) => (
+          <div key={i} className="flex h-full flex-1 flex-col items-center justify-end gap-2">
+            <div
+              className="w-full animate-pulse rounded-t-[8px] bg-graphite/[0.07]"
+              style={{ height: `${h}%`, animationDelay: `${i * 70}ms` }}
+            />
+            <div className="h-2.5 w-5 animate-pulse rounded-full bg-graphite/[0.06]" style={{ animationDelay: `${i * 70}ms` }} />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

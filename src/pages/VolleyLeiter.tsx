@@ -17,7 +17,9 @@ export default function VolleyLeiter() {
   const [zeiten, setZeiten] = useState<Record<number, string>>({})
 
   const load = useCallback(() => {
-    fetchVolleyMatches().then(setMatches).catch(() => setMatches([]))
+    // Bei einem fehlgeschlagenen Poll den vorhandenen Spielplan behalten (nicht auf []
+    // zurücksetzen) — sonst blinkt bei jedem WLAN-Blip „kein Spielplan" auf.
+    fetchVolleyMatches().then(setMatches).catch(() => setMatches((m) => m ?? []))
     fetchVolleySchienen().then(setZeiten).catch(() => {})
   }, [])
 

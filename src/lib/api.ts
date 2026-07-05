@@ -3,6 +3,15 @@ import { buildSchedule, computeFinalists, FINALS, VOLLEY_SCHIENEN, type VolleyMa
 import type {
   AppSettings,
   AuditEntry,
+  FeedbackEntry,
+  FeedbackEssen,
+  FeedbackLaenge,
+  FeedbackLehrerRolle,
+  FeedbackOrga,
+  FeedbackRolle,
+  FeedbackVolley,
+  FeedbackWebsite,
+  FeedbackWieder,
   LeaderboardRow,
   Score,
   StationAdmin,
@@ -79,10 +88,16 @@ export async function stationLogin(token: string, pin: string) {
   return data as ({ ok: true } & StationSession) | { ok: false; error: string }
 }
 
-export async function stationSetPin(token: string, pin: string) {
-  const { data, error } = await supabase.rpc('station_set_pin', { p_token: token, p_pin: pin })
+export async function stationSetPin(token: string, startPin: string, pin: string) {
+  const { data, error } = await supabase.rpc('station_set_pin', { p_token: token, p_start_pin: startPin, p_pin: pin })
   if (error) throw error
   return data as { ok: boolean; error?: string }
+}
+
+export async function setStationStartPin(stationId: string, startPin: string | null) {
+  const { data, error } = await supabase.rpc('set_station_start_pin', { p_station_id: stationId, p_start_pin: startPin })
+  if (error) throw error
+  return data as { ok: boolean; start_pin?: string; error?: string }
 }
 
 export async function submitScore(args: {
@@ -103,6 +118,65 @@ export async function submitScore(args: {
   })
   if (error) throw error
   return data as { ok: boolean; error?: string; alt?: number | null; neu?: number }
+}
+
+export async function submitFeedback(args: {
+  rating: number
+  rolle: FeedbackRolle | null
+  klasse: string | null
+  lehrerRolle: FeedbackLehrerRolle | null
+  highlights: string[]
+  kritik: string[]
+  besteStation: string | null
+  essen: FeedbackEssen | null
+  essenDetail: string[]
+  volleyball: FeedbackVolley | null
+  orga: FeedbackOrga | null
+  orgaDetail: string[]
+  laenge: FeedbackLaenge | null
+  website: FeedbackWebsite | null
+  websiteDetail: string[]
+  wieder: FeedbackWieder | null
+  kommentar: string
+}) {
+  const { data, error } = await supabase.rpc('submit_feedback', {
+    p_rating: args.rating,
+    p_rolle: args.rolle,
+    p_klasse: args.klasse,
+    p_lehrer_rolle: args.lehrerRolle,
+    p_highlights: args.highlights,
+    p_kritik: args.kritik,
+    p_beste_station: args.besteStation,
+    p_essen: args.essen,
+    p_essen_detail: args.essenDetail,
+    p_volleyball: args.volleyball,
+    p_orga: args.orga,
+    p_orga_detail: args.orgaDetail,
+    p_laenge: args.laenge,
+    p_website: args.website,
+    p_website_detail: args.websiteDetail,
+    p_wieder: args.wieder,
+    p_kommentar: args.kommentar.trim() || null,
+  })
+  if (error) throw error
+  return data as { ok: boolean; error?: string }
+}
+
+export async function fetchFeedbackCount(): Promise<number> {
+  const { data, error } = await supabase.rpc('feedback_count')
+  if (error) throw error
+  return (data as number) ?? 0
+}
+
+export async function fetchFeedback(): Promise<FeedbackEntry[]> {
+  const { data, error } = await supabase.from('feedback').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function deleteFeedback(id: string) {
+  const { error } = await supabase.from('feedback').delete().eq('id', id)
+  if (error) throw error
 }
 
 export async function signIn(email: string, password: string) {

@@ -28,6 +28,8 @@ export default function StationHelper() {
   const [session, setSession] = useState<StationSession | null>(null)
   const [pin, setPin] = useState('')
   const [pinConfirm, setPinConfirm] = useState('')
+  const [startPin, setStartPin] = useState('')
+  const [changeMode, setChangeMode] = useState(false)
   const [helfer, setHelfer] = useState('')
   const [loginError, setLoginError] = useState<string | null>(null)
   const [loggingIn, setLoggingIn] = useState(false)
@@ -51,7 +53,13 @@ export default function StationHelper() {
           if (fromStorage) setPhase('ready')
           else setUnlocking(true)
         } else if (!fromStorage) {
-          setLoginError(res.error === 'wrong_pin' ? 'Falsche PIN.' : 'Station nicht gefunden.')
+          setLoginError(
+            res.error === 'wrong_pin'
+              ? 'Falsche PIN.'
+              : res.error === 'locked'
+                ? 'Zu viele Fehlversuche — die Station ist kurz gesperrt. Wartet eine Minute und versucht es nochmal.'
+                : 'Station nicht gefunden.',
+          )
         } else {
           sessionStorage.removeItem(sessKey(token))
           setPhase('locked')
@@ -66,14 +74,21 @@ export default function StationHelper() {
   )
 
   const doSetPin = useCallback(
-    async (newPin: string, tryHelfer: string) => {
+    async (tryStartPin: string, newPin: string, tryHelfer: string) => {
       setLoginError(null)
       setLoggingIn(true)
       try {
-        const res = await stationSetPin(token, newPin)
+        const res = await stationSetPin(token, tryStartPin, newPin)
         if (!res.ok) {
-          if (res.error === 'already_set') setInfo((i) => (i ? { ...i, has_pin: true } : i))
-          setLoginError(res.error === 'already_set' ? 'Es wurde gerade eine PIN festgelegt — bitte jetzt einloggen.' : 'PIN konnte nicht gesetzt werden.')
+          setLoginError(
+            res.error === 'wrong_start_pin'
+              ? 'Start-PIN falsch. Sie steht auf eurem Stations-Zettel vom Orga-Team.'
+              : res.error === 'locked'
+                ? 'Zu viele Fehlversuche — die Station ist kurz gesperrt. Wartet eine Minute und versucht es nochmal.'
+                : res.error === 'too_short'
+                  ? 'Die neue PIN braucht mindestens 4 Zeichen.'
+                  : 'PIN konnte nicht gesetzt werden.',
+          )
           setLoggingIn(false)
           return
         }
@@ -82,6 +97,9 @@ export default function StationHelper() {
         setLoggingIn(false)
         return
       }
+      setChangeMode(false)
+      setStartPin('')
+      setInfo((i) => (i ? { ...i, has_pin: true } : i))
       await doLogin(newPin, tryHelfer)
     },
     [token, doLogin],
@@ -198,6 +216,16 @@ export default function StationHelper() {
         setPin={setPin}
         pinConfirm={pinConfirm}
         setPinConfirm={setPinConfirm}
+        startPin={startPin}
+        setStartPin={setStartPin}
+        changeMode={changeMode}
+        onToggleChangeMode={(v) => {
+          setChangeMode(v)
+          setLoginError(null)
+          setPin('')
+          setPinConfirm('')
+          setStartPin('')
+        }}
         loginError={loginError}
         loggingIn={loggingIn}
         unlocking={unlocking}
@@ -208,7 +236,7 @@ export default function StationHelper() {
         }}
         onSubmitSetup={(e) => {
           e.preventDefault()
-          if (helfer.trim() && pin.trim() && pin === pinConfirm) void doSetPin(pin.trim(), helfer)
+          if (helfer.trim() && startPin.trim() && pin.trim().length >= 4 && pin === pinConfirm) void doSetPin(startPin.trim(), pin.trim(), helfer)
         }}
         onUnlocked={() => {
           setUnlocking(false)
@@ -331,6 +359,10 @@ function LockCard({
   setPin,
   pinConfirm,
   setPinConfirm,
+  startPin,
+  setStartPin,
+  changeMode,
+  onToggleChangeMode,
   loginError,
   loggingIn,
   unlocking,
@@ -346,6 +378,10 @@ function LockCard({
   setPin: (v: string) => void
   pinConfirm: string
   setPinConfirm: (v: string) => void
+  startPin: string
+  setStartPin: (v: string) => void
+  changeMode: boolean
+  onToggleChangeMode: (v: boolean) => void
   loginError: string | null
   loggingIn: boolean
   unlocking: boolean
@@ -389,7 +425,7 @@ function LockCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unlocking])
 
-  const needsSetup = info?.has_pin === false
+  const needsSetup = info?.has_pin === false || changeMode
   const autoFocusPin = !justLoggedOut && typeof window !== 'undefined' && !window.matchMedia('(pointer: coarse)').matches
 
   return (
@@ -408,16 +444,42 @@ function LockCard({
           ) : needsSetup ? (
             <form onSubmit={onSubmitSetup} className="space-y-3">
               <p className="rounded-2xl bg-brass-400/10 px-4 py-2.5 text-sm text-brass-500">
-                Diese Station hat noch keine PIN. Leg jetzt eine fest — <b>merkt sie euch</b>, ihr braucht sie zum Eintragen.
+                {changeMode ? (
+                  <>Neue Stations-PIN festlegen — dafür braucht ihr die <b>Start-PIN</b> von eurem Stations-Zettel.</>
+                ) : (
+                  <>Diese Station hat noch keine PIN. Legt jetzt eine fest — dafür braucht ihr die <b>Start-PIN</b> von eurem Stations-Zettel (kommt vom Orga-Team).</>
+                )}
               </p>
               <TextInput label="Dein Name" placeholder="z.B. Leon" value={helfer} onChange={(e) => setHelfer(e.target.value)} autoComplete="off" />
-              <TextInput label="Neue Stations-PIN" inputMode="numeric" placeholder="••••" value={pin} onChange={(e) => setPin(e.target.value)} autoFocus={autoFocusPin} />
+              <TextInput
+                label="Start-PIN (vom Orga-Team)"
+                inputMode="numeric"
+                placeholder="••••••"
+                value={startPin}
+                onChange={(e) => setStartPin(e.target.value)}
+                autoFocus={autoFocusPin}
+              />
+              <TextInput label="Neue Stations-PIN (min. 4 Zeichen)" inputMode="numeric" placeholder="••••" value={pin} onChange={(e) => setPin(e.target.value)} />
               <TextInput label="PIN wiederholen" inputMode="numeric" placeholder="••••" value={pinConfirm} onChange={(e) => setPinConfirm(e.target.value)} />
               {pin && pinConfirm && pin !== pinConfirm && <p className="text-sm font-semibold text-crimson-600">Die PINs stimmen nicht überein.</p>}
               {loginError && <p className="text-sm font-semibold text-crimson-600">{loginError}</p>}
-              <Button type="submit" size="lg" className="w-full" disabled={loggingIn || !helfer.trim() || !pin.trim() || pin !== pinConfirm}>
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full"
+                disabled={loggingIn || !helfer.trim() || !startPin.trim() || pin.trim().length < 4 || pin !== pinConfirm}
+              >
                 {loggingIn ? <Spinner className="h-5 w-5 border-white/30 border-t-white" /> : 'PIN festlegen & starten'}
               </Button>
+              {changeMode && (
+                <button
+                  type="button"
+                  onClick={() => onToggleChangeMode(false)}
+                  className="w-full py-1 text-center text-sm font-semibold text-graphite-soft transition hover:text-graphite"
+                >
+                  Zurück zum Login
+                </button>
+              )}
             </form>
           ) : (
             <form onSubmit={onSubmitLogin} className="space-y-3">
@@ -427,6 +489,13 @@ function LockCard({
               <Button type="submit" size="lg" className="w-full" disabled={loggingIn || !helfer.trim() || !pin}>
                 {loggingIn ? <Spinner className="h-5 w-5 border-white/30 border-t-white" /> : 'Station starten'}
               </Button>
+              <button
+                type="button"
+                onClick={() => onToggleChangeMode(true)}
+                className="w-full py-1 text-center text-sm font-semibold text-graphite-soft transition hover:text-graphite"
+              >
+                PIN vergessen? Mit Start-PIN neu festlegen
+              </button>
             </form>
           )}
         </GlassCard>
@@ -460,9 +529,13 @@ function ScoreEditor({
     return () => vv.removeEventListener('resize', onResize)
   }, [])
   const parsed = Number.parseFloat(raw.replace(',', '.'))
-  const value = Number.isFinite(parsed) ? parsed : 0
+  const valid = Number.isFinite(parsed)
+  const value = valid ? parsed : 0
   const bump = (d: number) => setRaw(String(Math.max(0, Math.round((value + d) * 100) / 100)))
   const save = () => {
+    // Leeres/ungültiges Feld nicht als 0 speichern — sonst überschreibt ein
+    // versehentlich geleertes Feld den echten Punktestand mit 0.
+    if (!valid) return
     setSaved(true)
     window.setTimeout(() => onSave(value), 900)
   }
@@ -509,7 +582,7 @@ function ScoreEditor({
           <Button variant="ghost" className="flex-1" onClick={onClose} disabled={saved}>
             Abbrechen
           </Button>
-          <Button className="flex-1" size="lg" onClick={save} disabled={saved}>
+          <Button className="flex-1" size="lg" onClick={save} disabled={saved || !valid}>
             <Check className="h-5 w-5" /> Speichern
           </Button>
         </div>

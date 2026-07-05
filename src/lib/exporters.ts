@@ -1,8 +1,11 @@
-import type { LeaderboardRow, Score, StationPublic, Team } from './types'
+import type { FeedbackEntry, LeaderboardRow, Score, StationPublic, Team } from './types'
 import { rankMap } from './format'
 
 function csvCell(v: string | number | null | undefined): string {
-  const s = String(v ?? '')
+  let s = String(v ?? '')
+  // Formel-Injection verhindern: Zellen, die mit = + - @ (o.Ä.) beginnen, könnten in
+  // Excel/Numbers als Formel ausgeführt werden. Führendes Hochkomma neutralisiert das.
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`
   return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
@@ -23,6 +26,53 @@ export function exportResultsCSV(rows: LeaderboardRow[]) {
     lines.push([ranks.get(r.team_id) ?? '', r.name, r.jahrgang ?? '', r.gesamt].map(csvCell).join(';'))
   }
   download('sportfest-ergebnis.csv', lines.join('\n'))
+}
+
+const FB = {
+  rolle: { schueler: 'Schüler', lehrkraft: 'Lehrkraft', gast: 'Gast' },
+  lehrerRolle: { station: 'Stationsbetreuung', begleitung: 'Klassenbegleitung', dabei: 'Ohne Aufgabe' },
+  essen: { lecker: 'Richtig lecker', okay: 'War okay', 'nicht-so': 'Nicht so meins', 'nicht-da': 'War nicht dort' },
+  volleyball: { gespielt: 'Selbst gespielt', zugeschaut: 'Zugeschaut', verpasst: 'Verpasst' },
+  orga: { rund: 'Lief rund', okay: 'Ging so', chaotisch: 'Chaotisch' },
+  laenge: { 'zu-kurz': 'Zu kurz', 'genau-richtig': 'Genau richtig', 'zu-lang': 'Zu lang' },
+  website: { top: 'Gut umgesetzt', ausbaufaehig: 'Idee top, hakte', 'nicht-genutzt': 'Kaum genutzt' },
+  wieder: { ja: 'Ja, auf jeden Fall', 'mit-aenderungen': 'Ja, mit Änderungen', nein: 'Lieber nicht' },
+} as const
+
+export function exportFeedbackCSV(entries: FeedbackEntry[]) {
+  const header = [
+    'Datum', 'Rolle', 'Klasse', 'Lehrer-Rolle', 'Bewertung (1-5)', 'Highlights', 'Kritik', 'Beste Station',
+    'Essen', 'Essen-Details', 'Volleyball', 'Orga', 'Orga-Details', 'Länge', 'Website', 'Website-Details',
+    'Nächstes Jahr wieder', 'Kommentar',
+  ]
+  const lines = [header.map(csvCell).join(';')]
+  for (const e of entries) {
+    lines.push(
+      [
+        new Date(e.created_at).toLocaleString('de-DE'),
+        e.rolle ? FB.rolle[e.rolle] : '',
+        e.klasse ?? '',
+        e.lehrer_rolle ? FB.lehrerRolle[e.lehrer_rolle] : '',
+        e.rating,
+        e.highlights.join(', '),
+        e.kritik.join(', '),
+        e.beste_station ?? '',
+        e.essen ? FB.essen[e.essen] : '',
+        (e.essen_detail ?? []).join(', '),
+        e.volleyball ? FB.volleyball[e.volleyball] : '',
+        e.orga ? FB.orga[e.orga] : '',
+        (e.orga_detail ?? []).join(', '),
+        e.laenge ? FB.laenge[e.laenge] : '',
+        e.website ? FB.website[e.website] : '',
+        (e.website_detail ?? []).join(', '),
+        e.wieder ? FB.wieder[e.wieder] : '',
+        e.kommentar ?? '',
+      ]
+        .map(csvCell)
+        .join(';'),
+    )
+  }
+  download('sommerfest-feedback.csv', lines.join('\n'))
 }
 
 export function exportMatrixCSV(teams: Team[], stations: StationPublic[], scores: Score[]) {

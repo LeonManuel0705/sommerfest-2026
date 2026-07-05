@@ -39,11 +39,19 @@ export function StationQRSheet({ stations, origin }: { stations: StationAdmin[];
               </div>
               <div style={{ marginTop: 7, fontSize: 10, color: '#5a6b61', wordBreak: 'break-all' }}>/s/{s.token}</div>
               <div style={{ marginTop: 5, fontSize: 13, fontWeight: 700 }}>
-                PIN:{' '}
                 {s.pin ? (
-                  <span style={{ fontVariantNumeric: 'tabular-nums', letterSpacing: '0.12em' }}>{s.pin}</span>
+                  <>
+                    PIN: <span style={{ fontVariantNumeric: 'tabular-nums', letterSpacing: '0.12em' }}>{s.pin}</span>
+                  </>
+                ) : s.start_pin ? (
+                  <>
+                    Start-PIN: <span style={{ fontVariantNumeric: 'tabular-nums', letterSpacing: '0.12em', color: '#b45309' }}>{s.start_pin}</span>
+                    <div style={{ marginTop: 2, fontSize: 9, color: '#5a6b61', fontWeight: 600 }}>
+                      Beim ersten Öffnen damit eure eigene PIN festlegen
+                    </div>
+                  </>
                 ) : (
-                  <span style={{ color: '#9aa69e', fontWeight: 600 }}>Leitung setzt selbst</span>
+                  <span style={{ color: '#9aa69e', fontWeight: 600 }}>PIN beim Orga-Team erfragen</span>
                 )}
               </div>
               {!s.aktiv && <div style={{ marginTop: 3, fontSize: 9, color: '#b91c1c', fontWeight: 800, letterSpacing: '0.1em' }}>INAKTIV</div>}

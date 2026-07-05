@@ -1,29 +1,16 @@
--- ============================================================================
---  SOMMERFEST 2026 · KOMPLETT-SETUP (eine Datei, alles drin)
---  Im Supabase SQL-Editor einfügen und EINMAL auf "Run" klicken.
---
---  ⚠️  Dieses Skript setzt die Tabellen NEU auf und löscht dabei vorhandene
---      Punkte/Daten. Das ist in der Einrichtungsphase genau richtig.
---      NACH dem Start des Events nicht mehr ausführen!
---
---  Sicher beliebig oft wiederholbar (idempotent) – bei jedem Lauf landet die
---  DB im selben sauberen Zustand inkl. Beispiel-Klassen & -Stationen.
--- ============================================================================
 
 create extension if not exists pgcrypto;
 
--- ---- Sauberer Reset (Reihenfolge wegen Fremdschlüsseln) --------------------
+
 drop view  if exists leaderboard;
 drop view  if exists stations_public;
+drop table if exists feedback       cascade;
 drop table if exists audit_log      cascade;
 drop table if exists volley_matches cascade;
 drop table if exists scores         cascade;
 drop table if exists stations       cascade;
 drop table if exists teams          cascade;
 
--- ----------------------------------------------------------------------------
---  TABELLEN
--- ----------------------------------------------------------------------------
 create table teams (
   id          uuid primary key default gen_random_uuid(),
   name        text not null unique,
@@ -34,20 +21,36 @@ create table teams (
 );
 
 create table stations (
-  id            uuid primary key default gen_random_uuid(),
-  name          text not null unique,
-  beschreibung  text,
-  icon          text default 'medal',
-  gewicht       numeric not null default 1,
-  einheit       text,
-  token         text not null unique default encode(gen_random_bytes(8), 'hex'),
-  pin_hash      text,
-  pin           text,                                -- Klartext-PIN: NUR für Admins lesbar (RLS), nie in stations_public
-  aktiv         boolean not null default true,
-  pflicht       boolean not null default true,
-  sort          int default 0,
-  created_at    timestamptz default now()
+  id              uuid primary key default gen_random_uuid(),
+  name            text not null unique,
+  beschreibung    text,
+  icon            text default 'medal',
+  gewicht         numeric not null default 1,
+  einheit         text,
+  token           text not null unique default encode(gen_random_bytes(8), 'hex'),
+  pin_hash        text,
+  pin             text,                              -- Klartext-PIN: NUR für Admins lesbar (RLS), nie in stations_public
+  start_pin       text,                              -- Start-PIN vom Orga-Team: nötig, um die Stations-PIN zu setzen/ändern
+  start_pin_hash  text,
+  pin_fails       int not null default 0,            -- Fehlversuchs-Zähler fürs Lockout (Brute-Force-Schutz)
+  locked_until    timestamptz,
+  aktiv           boolean not null default true,
+  pflicht         boolean not null default true,
+  sort            int default 0,
+  created_at      timestamptz default now()
 );
+
+create or replace function stations_ensure_start_pin()
+returns trigger language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if new.start_pin is null or btrim(new.start_pin) = '' then
+    new.start_pin := lpad(floor(random() * 1000000)::int::text, 6, '0');
+  end if;
+  new.start_pin_hash := crypt(new.start_pin, gen_salt('bf'));
+  return new;
+end; $$;
+create trigger trg_stations_start_pin before insert on stations
+  for each row execute function stations_ensure_start_pin();
 
 create table scores (
   id              uuid primary key default gen_random_uuid(),
@@ -75,9 +78,6 @@ create index idx_scores_team    on scores(team_id);
 create index idx_scores_station on scores(station_id);
 create index idx_audit_created  on audit_log(created_at desc);
 
--- ----------------------------------------------------------------------------
---  SICHTEN
--- ----------------------------------------------------------------------------
 create view stations_public as
   select id, name, beschreibung, icon, gewicht, einheit, aktiv, pflicht, sort from stations;
 
@@ -91,9 +91,6 @@ create view leaderboard as
   left join stations st on st.id = s.station_id and st.aktiv
   group by t.id;
 
--- ----------------------------------------------------------------------------
---  ROW LEVEL SECURITY
--- ----------------------------------------------------------------------------
 alter table teams     enable row level security;
 alter table stations  enable row level security;
 alter table scores    enable row level security;
@@ -116,9 +113,22 @@ create policy audit_insert_admin on audit_log for insert with check (auth.uid() 
 grant select on stations_public to anon, authenticated;
 grant select on leaderboard     to anon, authenticated;
 
--- ----------------------------------------------------------------------------
---  FUNKTIONEN
--- ----------------------------------------------------------------------------
+
+create or replace function pin_attempt(p_station_id uuid, p_ok boolean)
+returns void language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if p_ok then
+    update stations set pin_fails = 0, locked_until = null
+    where id = p_station_id and (pin_fails <> 0 or locked_until is not null);
+  else
+    update stations set
+      locked_until = case when pin_fails + 1 >= 10 then now() + interval '60 seconds' else locked_until end,
+      pin_fails    = case when pin_fails + 1 >= 10 then 0 else pin_fails + 1 end
+    where id = p_station_id;
+  end if;
+end; $$;
+revoke all on function pin_attempt(uuid, boolean) from public;
+
 create or replace function get_station_public(p_token text)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare v stations;
@@ -137,9 +147,14 @@ declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv;
   if not found then return jsonb_build_object('ok', false, 'error', 'station_not_found'); end if;
+  if v.locked_until is not null and v.locked_until > now() then
+    return jsonb_build_object('ok', false, 'error', 'locked');
+  end if;
   if v.pin_hash is null or p_pin is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
+    perform pin_attempt(v.id, false);
     return jsonb_build_object('ok', false, 'error', 'wrong_pin');
   end if;
+  perform pin_attempt(v.id, true);
   return jsonb_build_object(
     'ok', true,
     'station', jsonb_build_object('id', v.id, 'name', v.name, 'icon', v.icon,
@@ -159,11 +174,19 @@ declare v stations; v_old numeric;
 begin
   select * into v from stations where token = p_token and aktiv;
   if not found then return jsonb_build_object('ok', false, 'error', 'station_not_found'); end if;
+  if v.locked_until is not null and v.locked_until > now() then
+    return jsonb_build_object('ok', false, 'error', 'locked');
+  end if;
   if v.pin_hash is null or p_pin is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
+    perform pin_attempt(v.id, false);
     return jsonb_build_object('ok', false, 'error', 'wrong_pin');
   end if;
+  perform pin_attempt(v.id, true);
   if not exists (select 1 from teams where id = p_team_id) then
     return jsonb_build_object('ok', false, 'error', 'team_not_found');
+  end if;
+  if p_punkte is null or p_punkte < 0 or p_punkte > 100000 then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
   end if;
   select punkte into v_old from scores where station_id = v.id and team_id = p_team_id;
   insert into scores (station_id, team_id, punkte, notiz, eingetragen_von, updated_at)
@@ -196,21 +219,43 @@ grant execute on function station_login(text, text)                          to 
 grant execute on function get_station_public(text)                           to anon, authenticated;
 grant execute on function set_station_pin(uuid, text)                        to authenticated;
 
--- Stationsleitung legt beim ERSTEN Zugriff selbst eine PIN fest (nur wenn noch keine
--- gesetzt ist). Danach gesperrt — nur Admins können per set_station_pin zurücksetzen.
-create or replace function station_set_pin(p_token text, p_pin text)
+drop function if exists station_set_pin(text, text);
+create or replace function station_set_pin(p_token text, p_start_pin text, p_pin text)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv;
   if not found then return jsonb_build_object('ok', false, 'error', 'station_not_found'); end if;
-  if v.pin_hash is not null then return jsonb_build_object('ok', false, 'error', 'already_set'); end if;
-  if p_pin is null or length(btrim(p_pin)) = 0 then return jsonb_build_object('ok', false, 'error', 'empty'); end if;
+  if v.locked_until is not null and v.locked_until > now() then
+    return jsonb_build_object('ok', false, 'error', 'locked');
+  end if;
+  if v.start_pin_hash is null or p_start_pin is null or crypt(btrim(p_start_pin), v.start_pin_hash) <> v.start_pin_hash then
+    perform pin_attempt(v.id, false);
+    return jsonb_build_object('ok', false, 'error', 'wrong_start_pin');
+  end if;
+  if p_pin is null or length(btrim(p_pin)) < 4 then
+    return jsonb_build_object('ok', false, 'error', 'too_short');
+  end if;
+  perform pin_attempt(v.id, true);
   update stations set pin_hash = crypt(btrim(p_pin), gen_salt('bf')), pin = btrim(p_pin) where id = v.id;
   return jsonb_build_object('ok', true);
 end; $$;
-revoke all on function station_set_pin(text, text) from public;
-grant execute on function station_set_pin(text, text) to anon, authenticated;
+revoke all on function station_set_pin(text, text, text) from public;
+grant execute on function station_set_pin(text, text, text) to anon, authenticated;
+
+create or replace function set_station_start_pin(p_station_id uuid, p_start_pin text default null)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_pin text;
+begin
+  if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'not_authenticated'); end if;
+  v_pin := nullif(btrim(coalesce(p_start_pin, '')), '');
+  if v_pin is null then v_pin := lpad(floor(random() * 1000000)::int::text, 6, '0'); end if;
+  update stations set start_pin = v_pin, start_pin_hash = crypt(v_pin, gen_salt('bf')) where id = p_station_id;
+  if not found then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  return jsonb_build_object('ok', true, 'start_pin', v_pin);
+end; $$;
+revoke all on function set_station_start_pin(uuid, text) from public;
+grant execute on function set_station_start_pin(uuid, text) to authenticated;
 
 create or replace function db_health()
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
@@ -234,11 +279,6 @@ end; $$;
 revoke all on function db_health() from public;
 grant execute on function db_health() to authenticated;
 
--- ----------------------------------------------------------------------------
---  GLOBALE EINSTELLUNGEN
---  Siegerehrungs-Modus: Wertung öffentlich einfrieren (geheim halten) bis zur
---  Siegerehrung, dann auf Knopfdruck enthüllen. Eine einzige Zeile (id = 1).
--- ----------------------------------------------------------------------------
 drop table if exists settings cascade;
 create table settings (
   id                int primary key default 1,
@@ -253,9 +293,6 @@ create policy settings_write_admin on settings for all
   using (auth.uid() is not null) with check (auth.uid() is not null);
 grant select on settings to anon, authenticated;
 
--- ----------------------------------------------------------------------------
---  VOLLEYBALL-TURNIER
--- ----------------------------------------------------------------------------
 create table volley_matches (
   id         uuid primary key default gen_random_uuid(),
   schiene    int  not null,
@@ -275,8 +312,6 @@ create policy volley_select_all  on volley_matches for select using (true);
 create policy volley_write_admin on volley_matches for all
   using (auth.uid() is not null) with check (auth.uid() is not null);
 
--- Schienen-Zeiten: werden auf der Website angezeigt und können von Admins
--- UND der Turnierleitung live geändert werden (z.B. bei Verzögerungen).
 drop table if exists volley_schienen cascade;
 create table volley_schienen (
   schiene    int primary key,
@@ -291,15 +326,18 @@ create policy volley_schienen_select_all  on volley_schienen for select using (t
 create policy volley_schienen_write_admin on volley_schienen for all
   using (auth.uid() is not null) with check (auth.uid() is not null);
 
--- Turnierleitung: editiert das Volleyball-Turnier per Token + PIN der Station
--- "Volleyball-Turnier" (wie eine normale Station), ganz ohne Admin-Login.
 create or replace function volley_auth(p_token text, p_pin text)
 returns boolean language plpgsql security definer set search_path = public, extensions as $$
 declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv and name = 'Volleyball-Turnier';
   if not found then return false; end if;
-  if v.pin_hash is null or p_pin is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then return false; end if;
+  if v.locked_until is not null and v.locked_until > now() then return false; end if;
+  if v.pin_hash is null or p_pin is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
+    perform pin_attempt(v.id, false);
+    return false;
+  end if;
+  perform pin_attempt(v.id, true);
   return true;
 end; $$;
 
@@ -309,9 +347,14 @@ declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv and name = 'Volleyball-Turnier';
   if not found then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  if v.locked_until is not null and v.locked_until > now() then
+    return jsonb_build_object('ok', false, 'error', 'locked');
+  end if;
   if v.pin_hash is null or p_pin is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
+    perform pin_attempt(v.id, false);
     return jsonb_build_object('ok', false, 'error', 'wrong_pin');
   end if;
+  perform pin_attempt(v.id, true);
   return jsonb_build_object('ok', true, 'name', v.name);
 end; $$;
 
@@ -352,9 +395,113 @@ grant execute on function volley_set_match(text, text, uuid, int, int, text) to 
 grant execute on function volley_set_teams(text, text, uuid, text, text)     to anon, authenticated;
 grant execute on function volley_set_zeit(text, text, int, text)             to anon, authenticated;
 
--- ----------------------------------------------------------------------------
---  REALTIME (idempotent – kein Fehler beim erneuten Ausführen)
--- ----------------------------------------------------------------------------
+create table feedback (
+  id             uuid primary key default gen_random_uuid(),
+  rolle          text,
+  klasse         text,
+  lehrer_rolle   text,
+  rating         int  not null check (rating between 1 and 5),
+  highlights     text[] not null default '{}',
+  kritik         text[] not null default '{}',
+  beste_station  text,
+  essen          text,
+  essen_detail   text[] not null default '{}',
+  volleyball     text,
+  orga           text,
+  orga_detail    text[] not null default '{}',
+  laenge         text,
+  website        text,
+  website_detail text[] not null default '{}',
+  wieder         text,
+  kommentar      text,
+  created_at     timestamptz default now()
+);
+alter table feedback enable row level security;
+create policy feedback_select_admin on feedback for select using (auth.uid() is not null);
+create policy feedback_delete_admin on feedback for delete using (auth.uid() is not null);
+
+create or replace function submit_feedback(
+  p_rating int,
+  p_rolle text default null,
+  p_klasse text default null,
+  p_lehrer_rolle text default null,
+  p_highlights text[] default '{}',
+  p_kritik text[] default '{}',
+  p_beste_station text default null,
+  p_essen text default null,
+  p_essen_detail text[] default '{}',
+  p_volleyball text default null,
+  p_orga text default null,
+  p_orga_detail text[] default '{}',
+  p_laenge text default null,
+  p_website text default null,
+  p_website_detail text[] default '{}',
+  p_wieder text default null,
+  p_kommentar text default null)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_kommentar text; v_klasse text; v_station text;
+  v_highlights text[]; v_kritik text[]; v_essen_detail text[]; v_orga_detail text[]; v_website_detail text[];
+begin
+  if p_rating is null or p_rating < 1 or p_rating > 5 then
+    return jsonb_build_object('ok', false, 'error', 'bad_rating');
+  end if;
+  v_klasse := nullif(btrim(coalesce(p_klasse, '')), '');
+  if length(v_klasse) > 12 then v_klasse := null; end if;
+  v_station := nullif(btrim(coalesce(p_beste_station, '')), '');
+  if length(v_station) > 40 then v_station := null; end if;
+  v_kommentar := nullif(btrim(coalesce(p_kommentar, '')), '');
+  if length(v_kommentar) > 500 then v_kommentar := left(v_kommentar, 500); end if;
+
+  select coalesce(array_agg(distinct btrim(x)), '{}') into v_highlights
+    from unnest(coalesce(p_highlights, '{}'::text[])) x where btrim(x) <> '' and length(x) <= 70;
+  if coalesce(array_length(v_highlights, 1), 0) > 8 then v_highlights := v_highlights[1:8]; end if;
+  select coalesce(array_agg(distinct btrim(x)), '{}') into v_kritik
+    from unnest(coalesce(p_kritik, '{}'::text[])) x where btrim(x) <> '' and length(x) <= 70;
+  if coalesce(array_length(v_kritik, 1), 0) > 8 then v_kritik := v_kritik[1:8]; end if;
+  select coalesce(array_agg(distinct btrim(x)), '{}') into v_essen_detail
+    from unnest(coalesce(p_essen_detail, '{}'::text[])) x where btrim(x) <> '' and length(x) <= 70;
+  if coalesce(array_length(v_essen_detail, 1), 0) > 8 then v_essen_detail := v_essen_detail[1:8]; end if;
+  select coalesce(array_agg(distinct btrim(x)), '{}') into v_orga_detail
+    from unnest(coalesce(p_orga_detail, '{}'::text[])) x where btrim(x) <> '' and length(x) <= 70;
+  if coalesce(array_length(v_orga_detail, 1), 0) > 8 then v_orga_detail := v_orga_detail[1:8]; end if;
+  select coalesce(array_agg(distinct btrim(x)), '{}') into v_website_detail
+    from unnest(coalesce(p_website_detail, '{}'::text[])) x where btrim(x) <> '' and length(x) <= 70;
+  if coalesce(array_length(v_website_detail, 1), 0) > 8 then v_website_detail := v_website_detail[1:8]; end if;
+
+  insert into feedback (
+    rolle, klasse, lehrer_rolle, rating, highlights, kritik, beste_station,
+    essen, essen_detail, volleyball, orga, orga_detail, laenge, website, website_detail, wieder, kommentar)
+  values (
+    case when p_rolle in ('schueler', 'lehrkraft', 'gast') then p_rolle else null end,
+    v_klasse,
+    case when p_lehrer_rolle in ('station', 'begleitung', 'dabei') then p_lehrer_rolle else null end,
+    p_rating,
+    v_highlights,
+    v_kritik,
+    v_station,
+    case when p_essen in ('lecker', 'okay', 'nicht-so', 'nicht-da') then p_essen else null end,
+    v_essen_detail,
+    case when p_volleyball in ('gespielt', 'zugeschaut', 'verpasst') then p_volleyball else null end,
+    case when p_orga in ('rund', 'okay', 'chaotisch') then p_orga else null end,
+    v_orga_detail,
+    case when p_laenge in ('zu-kurz', 'genau-richtig', 'zu-lang') then p_laenge else null end,
+    case when p_website in ('top', 'ausbaufaehig', 'nicht-genutzt') then p_website else null end,
+    v_website_detail,
+    case when p_wieder in ('ja', 'mit-aenderungen', 'nein') then p_wieder else null end,
+    v_kommentar);
+  return jsonb_build_object('ok', true);
+end; $$;
+revoke all on function submit_feedback(int, text, text, text, text[], text[], text, text, text[], text, text, text[], text, text, text[], text, text) from public;
+grant execute on function submit_feedback(int, text, text, text, text[], text[], text, text, text[], text, text, text[], text, text, text[], text, text) to anon, authenticated;
+
+create or replace function feedback_count()
+returns int language sql security definer set search_path = public as $$
+  select count(*)::int from feedback;
+$$;
+revoke all on function feedback_count() from public;
+grant execute on function feedback_count() to anon, authenticated;
+
 do $$
 begin
   if not exists (select 1 from pg_publication_tables
@@ -374,9 +521,6 @@ begin
   then alter publication supabase_realtime add table settings; end if;
 end $$;
 
--- ----------------------------------------------------------------------------
---  DATEN: Klassen 5s–10s (21) + 12 Pflicht-Stationen + Versorgung (optional)
--- ----------------------------------------------------------------------------
 insert into teams (name, jahrgang, farbe, sort) values
   ('5s',  5, '#f43f5e',  55),
   ('6s',  6, '#fb923c',  65),
@@ -401,15 +545,10 @@ insert into stations (name, beschreibung, icon, gewicht, einheit, pin_hash, sort
   ('Volleyball-Turnier',   'Großes Finale in der Halle',         'goal',       1, 'Punkte', null, 12)
 on conflict (name) do nothing;
 
--- Versorgung: zählt punktetechnisch wie eine Station, ist aber freiwillig (pflicht=false).
 insert into stations (name, beschreibung, icon, gewicht, einheit, pflicht, pin_hash, sort) values
   ('Versorgung', 'Essen & Trinken — freiwillige Bonuspunkte', 'utensils', 1, 'Punkte', false, null, 13)
 on conflict (name) do nothing;
 
--- ----------------------------------------------------------------------------
---  VOLLEYBALL-SPIELPLAN (offizieller Plan 2026: Gruppenphase je Schiene + Finals)
---  Steht direkt nach dem Setup bereit — kein "Spielplan erzeugen" mehr nötig.
--- ----------------------------------------------------------------------------
 insert into volley_matches (schiene, gruppe, team_a, team_b, status, phase, platz, sort) values
   (1, 'A', '7a', '7c', 'geplant', 'gruppe', null, 0),
   (1, 'A', '7a', '7s', 'geplant', 'gruppe', null, 1),
@@ -453,5 +592,3 @@ insert into volley_matches (schiene, gruppe, team_a, team_b, status, phase, plat
   (2, '', '1. Gruppe A', '1. Gruppe B', 'geplant', 'final', 1, 39),
   (2, '', '2. Gruppe A', '2. Gruppe B', 'geplant', 'final', 3, 40),
   (2, '', '3. Gruppe A', '3. Gruppe B', 'geplant', 'final', 5, 41);
-
--- Fertig! ✅  Du solltest unten "Success. No rows returned" sehen.

@@ -20,6 +20,8 @@ const Lageplan = lazy(() => import('@/pages/Lageplan'))
 const Volleyball = lazy(() => import('@/pages/Volleyball'))
 const VolleyLeiter = lazy(() => import('@/pages/VolleyLeiter'))
 const QR = lazy(() => import('@/pages/QR'))
+const Feedback = lazy(() => import('@/pages/Feedback'))
+const FeedbackQR = lazy(() => import('@/pages/FeedbackQR'))
 
 function Loading() {
   return (
@@ -58,6 +60,8 @@ function AnimatedRoutes() {
             <Route path="/volleyball" element={<Volleyball />} />
             <Route path="/v/:token" element={<VolleyLeiter />} />
             <Route path="/qr" element={<QR />} />
+            <Route path="/feedback" element={<Feedback />} />
+            <Route path="/feedback-qr" element={<FeedbackQR />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </motion.div>
@@ -76,6 +80,7 @@ export default function App() {
       void import('@/pages/Zeitreise')
       void import('@/pages/Beamer')
       void import('@/pages/QR')
+      void import('@/pages/Feedback')
       void import('@/pages/Admin')
     }
     const ric = window.requestIdleCallback
