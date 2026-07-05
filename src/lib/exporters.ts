@@ -3,9 +3,10 @@ import { rankMap } from './format'
 
 function csvCell(v: string | number | null | undefined): string {
   let s = String(v ?? '')
-  // Formel-Injection verhindern: Zellen, die mit = + - @ (o.Ä.) beginnen, könnten in
-  // Excel/Numbers als Formel ausgeführt werden. Führendes Hochkomma neutralisiert das.
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`
+  // Formel-Injection verhindern: TEXT-Zellen, die mit = + - @ (o.Ä.) beginnen, könnten
+  // in Excel/Numbers als Formel ausgeführt werden. Führendes Hochkomma neutralisiert das.
+  // Echte Zahlen (auch negative) bleiben unangetastet, damit sie Zahl bleiben.
+  if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`
   return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 

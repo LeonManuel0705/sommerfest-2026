@@ -64,8 +64,10 @@ export function useLiveData(opts?: { realtime?: boolean; pollMs?: number }) {
       const lb = await fetchLeaderboard()
       if (mounted.current) setState((s) => ({ ...s, polled: sortLb(lb), live: true, loading: false, error: null }))
     } catch (e) {
-      // Netz-Blip: bestehende Daten stehen lassen, nur beim allerersten Laden als Fehler zeigen.
-      if (mounted.current) setState((s) => ({ ...s, loading: false, error: s.polled === null ? (e as Error).message : null, live: false }))
+      // Netz-Blip: bestehende Daten + Live-Status stehen lassen, nur beim allerersten
+      // Laden als Fehler/„nicht live" zeigen — sonst flackert die Live-Pille bei jedem Poll.
+      if (mounted.current)
+        setState((s) => (s.polled === null ? { ...s, loading: false, error: (e as Error).message, live: false } : s))
     }
   }, [])
 
@@ -94,6 +96,7 @@ export function useLiveData(opts?: { realtime?: boolean; pollMs?: number }) {
     }
 
     loadAll()
+    let subscribedOnce = false
     const channel = supabase
       .channel('live-data')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, reloadScores)
@@ -101,9 +104,13 @@ export function useLiveData(opts?: { realtime?: boolean; pollMs?: number }) {
       .subscribe((status) => {
         if (!mounted.current) return
         setState((s) => ({ ...s, live: status === 'SUBSCRIBED' }))
-        // Nach (Wieder-)Verbindung alles neu laden — sonst fehlen Scores, die
-        // während einer Trennung reinkamen (z.B. unbeaufsichtigter Beamer).
-        if (status === 'SUBSCRIBED') loadAll()
+        // Beim ERSTEN SUBSCRIBED deckt schon der initiale loadAll() oben ab (kein
+        // Doppel-Load). Erst bei einem RE-Subscribe (Reconnect) neu laden — sonst
+        // fehlen Scores, die während der Trennung reinkamen (z.B. Beamer).
+        if (status === 'SUBSCRIBED') {
+          if (subscribedOnce) loadAll()
+          subscribedOnce = true
+        }
       })
 
     // Sicherheitsnetz: Falls das WLAN den WebSocket kappt (Schul-WLAN/OctoGate),

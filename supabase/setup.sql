@@ -114,16 +114,24 @@ grant select on stations_public to anon, authenticated;
 grant select on leaderboard     to anon, authenticated;
 
 
+-- Brute-Force-Bremse: zählt FALSCHE PIN-Versuche, sperrt nach 10 für 60s. Nur
+-- intern aufgerufen. Wichtig: Die aufrufenden Funktionen prüfen die PIN ZUERST —
+-- eine korrekte PIN kommt immer durch (auch während einer Sperre), damit niemand
+-- mit dem sichtbaren Token eine Station gezielt aussperren kann (DoS). Der Zähler
+-- verfällt nach 10 Min. ohne neuen Fehlversuch, damit Tippfehler nicht kumulieren.
 create or replace function pin_attempt(p_station_id uuid, p_ok boolean)
 returns void language plpgsql security definer set search_path = public, extensions as $$
+declare v_fails int;
 begin
   if p_ok then
     update stations set pin_fails = 0, locked_until = null
     where id = p_station_id and (pin_fails <> 0 or locked_until is not null);
   else
+    select case when locked_until is not null and locked_until < now() - interval '10 minutes' then 0 else pin_fails end
+      into v_fails from stations where id = p_station_id;
     update stations set
-      locked_until = case when pin_fails + 1 >= 10 then now() + interval '60 seconds' else locked_until end,
-      pin_fails    = case when pin_fails + 1 >= 10 then 0 else pin_fails + 1 end
+      locked_until = case when coalesce(v_fails, 0) + 1 >= 10 then now() + interval '60 seconds' else now() end,
+      pin_fails    = case when coalesce(v_fails, 0) + 1 >= 10 then 0 else coalesce(v_fails, 0) + 1 end
     where id = p_station_id;
   end if;
 end; $$;
@@ -147,14 +155,16 @@ declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv;
   if not found then return jsonb_build_object('ok', false, 'error', 'station_not_found'); end if;
-  if v.locked_until is not null and v.locked_until > now() then
-    return jsonb_build_object('ok', false, 'error', 'locked');
-  end if;
-  if v.pin_hash is null or p_pin is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
+  -- Korrekte PIN kommt IMMER durch (auch während einer Sperre) → kein DoS.
+  if v.pin_hash is not null and p_pin is not null and crypt(p_pin, v.pin_hash) = v.pin_hash then
+    perform pin_attempt(v.id, true);
+  else
+    if v.locked_until is not null and v.locked_until > now() then
+      return jsonb_build_object('ok', false, 'error', 'locked');
+    end if;
     perform pin_attempt(v.id, false);
     return jsonb_build_object('ok', false, 'error', 'wrong_pin');
   end if;
-  perform pin_attempt(v.id, true);
   return jsonb_build_object(
     'ok', true,
     'station', jsonb_build_object('id', v.id, 'name', v.name, 'icon', v.icon,
@@ -174,14 +184,16 @@ declare v stations; v_old numeric;
 begin
   select * into v from stations where token = p_token and aktiv;
   if not found then return jsonb_build_object('ok', false, 'error', 'station_not_found'); end if;
-  if v.locked_until is not null and v.locked_until > now() then
-    return jsonb_build_object('ok', false, 'error', 'locked');
-  end if;
-  if v.pin_hash is null or p_pin is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
+  -- Korrekte PIN kommt IMMER durch (auch während einer Sperre) → kein DoS.
+  if v.pin_hash is not null and p_pin is not null and crypt(p_pin, v.pin_hash) = v.pin_hash then
+    perform pin_attempt(v.id, true);
+  else
+    if v.locked_until is not null and v.locked_until > now() then
+      return jsonb_build_object('ok', false, 'error', 'locked');
+    end if;
     perform pin_attempt(v.id, false);
     return jsonb_build_object('ok', false, 'error', 'wrong_pin');
   end if;
-  perform pin_attempt(v.id, true);
   if not exists (select 1 from teams where id = p_team_id) then
     return jsonb_build_object('ok', false, 'error', 'team_not_found');
   end if;
@@ -203,9 +215,12 @@ create or replace function set_station_pin(p_station_id uuid, p_pin text)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 begin
   if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'not_authenticated'); end if;
+  -- Admin-Reset hebt eine evtl. bestehende Sperre gleich mit auf.
   update stations set
-    pin_hash = case when p_pin is null or p_pin = '' then null else crypt(p_pin, gen_salt('bf')) end,
-    pin      = case when p_pin is null or p_pin = '' then null else p_pin end
+    pin_hash     = case when p_pin is null or p_pin = '' then null else crypt(p_pin, gen_salt('bf')) end,
+    pin          = case when p_pin is null or p_pin = '' then null else p_pin end,
+    pin_fails    = 0,
+    locked_until = null
   where id = p_station_id;
   return jsonb_build_object('ok', found);
 end; $$;
@@ -226,17 +241,19 @@ declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv;
   if not found then return jsonb_build_object('ok', false, 'error', 'station_not_found'); end if;
-  if v.locked_until is not null and v.locked_until > now() then
-    return jsonb_build_object('ok', false, 'error', 'locked');
-  end if;
-  if v.start_pin_hash is null or p_start_pin is null or crypt(btrim(p_start_pin), v.start_pin_hash) <> v.start_pin_hash then
+  -- Korrekte Start-PIN kommt IMMER durch (auch während einer Sperre) → kein DoS.
+  if v.start_pin_hash is not null and p_start_pin is not null and crypt(btrim(p_start_pin), v.start_pin_hash) = v.start_pin_hash then
+    if p_pin is null or length(btrim(p_pin)) < 4 then
+      return jsonb_build_object('ok', false, 'error', 'too_short');
+    end if;
+    perform pin_attempt(v.id, true);
+  else
+    if v.locked_until is not null and v.locked_until > now() then
+      return jsonb_build_object('ok', false, 'error', 'locked');
+    end if;
     perform pin_attempt(v.id, false);
     return jsonb_build_object('ok', false, 'error', 'wrong_start_pin');
   end if;
-  if p_pin is null or length(btrim(p_pin)) < 4 then
-    return jsonb_build_object('ok', false, 'error', 'too_short');
-  end if;
-  perform pin_attempt(v.id, true);
   update stations set pin_hash = crypt(btrim(p_pin), gen_salt('bf')), pin = btrim(p_pin) where id = v.id;
   return jsonb_build_object('ok', true);
 end; $$;
@@ -332,13 +349,14 @@ declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv and name = 'Volleyball-Turnier';
   if not found then return false; end if;
-  if v.locked_until is not null and v.locked_until > now() then return false; end if;
-  if v.pin_hash is null or p_pin is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
-    perform pin_attempt(v.id, false);
-    return false;
+  -- Korrekte PIN kommt IMMER durch (auch während einer Sperre) → kein DoS.
+  if v.pin_hash is not null and p_pin is not null and crypt(p_pin, v.pin_hash) = v.pin_hash then
+    perform pin_attempt(v.id, true);
+    return true;
   end if;
-  perform pin_attempt(v.id, true);
-  return true;
+  if v.locked_until is not null and v.locked_until > now() then return false; end if;
+  perform pin_attempt(v.id, false);
+  return false;
 end; $$;
 
 create or replace function volley_login(p_token text, p_pin text)
@@ -347,15 +365,16 @@ declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv and name = 'Volleyball-Turnier';
   if not found then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  -- Korrekte PIN kommt IMMER durch (auch während einer Sperre) → kein DoS.
+  if v.pin_hash is not null and p_pin is not null and crypt(p_pin, v.pin_hash) = v.pin_hash then
+    perform pin_attempt(v.id, true);
+    return jsonb_build_object('ok', true, 'name', v.name);
+  end if;
   if v.locked_until is not null and v.locked_until > now() then
     return jsonb_build_object('ok', false, 'error', 'locked');
   end if;
-  if v.pin_hash is null or p_pin is null or crypt(p_pin, v.pin_hash) <> v.pin_hash then
-    perform pin_attempt(v.id, false);
-    return jsonb_build_object('ok', false, 'error', 'wrong_pin');
-  end if;
-  perform pin_attempt(v.id, true);
-  return jsonb_build_object('ok', true, 'name', v.name);
+  perform pin_attempt(v.id, false);
+  return jsonb_build_object('ok', false, 'error', 'wrong_pin');
 end; $$;
 
 create or replace function volley_set_match(
