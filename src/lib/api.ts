@@ -20,10 +20,59 @@ import type {
   Team,
 } from './types'
 
+function normalizeZeitplan(value: unknown): AppSettings['zeitplan'] {
+  if (!Array.isArray(value)) return null
+  const clean = value
+    .filter((e): e is Record<string, unknown> => typeof e === 'object' && e !== null && !Array.isArray(e))
+    .map((e) => ({
+      time: typeof e.time === 'string' ? e.time : '',
+      title: typeof e.title === 'string' ? e.title : '',
+      desc: typeof e.desc === 'string' ? e.desc : '',
+    }))
+    .filter((e) => e.title !== '')
+  return clean.length > 0 ? clean : null
+}
+
+function normalizeSettings(data: Record<string, unknown> | null): AppSettings {
+  const level = data?.hinweis_level
+  return {
+    scoreboard_frozen: Boolean(data?.scoreboard_frozen),
+    regen_modus: Boolean(data?.regen_modus ?? true),
+    volleyball_aktiv: Boolean(data?.volleyball_aktiv ?? false),
+    lehrer_spiel_aktiv: Boolean(data?.lehrer_spiel_aktiv ?? true),
+    hinweis_text: typeof data?.hinweis_text === 'string' && data.hinweis_text.trim() !== '' ? (data.hinweis_text as string) : null,
+    hinweis_level: level === 'warn' || level === 'alert' ? level : 'info',
+    zeitplan: normalizeZeitplan(data?.zeitplan),
+  }
+}
+
 export async function fetchSettings(): Promise<AppSettings> {
-  const { data, error } = await supabase.from('settings').select('scoreboard_frozen').eq('id', 1).maybeSingle()
+  const { data, error } = await supabase.from('settings').select('*').eq('id', 1).maybeSingle()
   if (error) throw error
-  return { scoreboard_frozen: Boolean(data?.scoreboard_frozen) }
+  return normalizeSettings(data)
+}
+
+export async function fetchSettingsRaw(): Promise<Record<string, unknown> | null> {
+  const { data, error } = await supabase.from('settings').select('*').eq('id', 1).maybeSingle()
+  if (error) throw error
+  return data
+}
+
+export async function updateEventSettings(patch: Partial<AppSettings>): Promise<void> {
+  const { error } = await supabase
+    .from('settings')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', 1)
+  if (error) throw error
+}
+
+export async function setVolleyballAktiv(aktiv: boolean): Promise<void> {
+  const { data, error } = await supabase.rpc('set_volleyball_aktiv', { p_aktiv: aktiv })
+  if (error) throw error
+  const res = data as { ok: boolean; error?: string; station_rows?: number }
+  if (!res?.ok) throw new Error(res?.error ?? 'Speichern fehlgeschlagen')
+  if ((res.station_rows ?? 0) === 0)
+    throw new Error('Seiten umgestellt, aber die Station „Volleyball-Turnier“ wurde nicht gefunden — Wertung/QR bitte im Stationen-Tab prüfen.')
 }
 
 export async function setScoreboardFrozen(frozen: boolean): Promise<void> {

@@ -1,10 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, type Variants } from 'framer-motion'
-import { AlarmClock, CalendarDays, Clock, Timer, Trophy, UserCheck, Users, Volleyball as VolleyballIcon } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import {
+  AlarmClock,
+  ArrowRight,
+  CalendarDays,
+  Clock,
+  CloudRain,
+  MapPin,
+  Megaphone,
+  Timer,
+  Trophy,
+  UserCheck,
+  Users,
+  Volleyball as VolleyballIcon,
+} from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { SiteHeader } from '@/components/site/SiteHeader'
 import { SiteFooter } from '@/components/site/SiteFooter'
 import { fetchVolleyMatches, fetchVolleySchienen } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
+import { useEventSettingsState } from '@/lib/useSettings'
 import { computeStandings, FINALS, VOLLEY_SCHIENEN, type VolleyMatch } from '@/lib/volley'
 import { cx } from '@/lib/format'
 import { EmblemLoader } from '@/components/ui'
@@ -21,10 +37,13 @@ const REGELN = [
 ]
 
 export default function Volleyball() {
+  const { settings, loaded } = useEventSettingsState()
+  const aktiv = settings.volleyball_aktiv
   const [matches, setMatches] = useState<VolleyMatch[] | null>(null)
   const [zeiten, setZeiten] = useState<Record<number, string>>({})
 
   useEffect(() => {
+    if (!aktiv) return
     let alive = true
     const load = () => {
       fetchVolleyMatches()
@@ -46,9 +65,21 @@ export default function Volleyball() {
       supabase.removeChannel(ch)
       window.clearInterval(id)
     }
-  }, [])
+  }, [aktiv])
 
   const live = (matches ?? []).filter((m) => m.status === 'live')
+
+  if (!loaded) {
+    return (
+      <div className="min-h-dvh bg-paper">
+        <SiteHeader />
+        <main className="mx-auto grid max-w-5xl place-items-center px-5 py-32 sm:px-8">
+          <EmblemLoader />
+        </main>
+        <SiteFooter />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-dvh bg-paper">
@@ -66,15 +97,69 @@ export default function Volleyball() {
             }}
           />
           <div className="relative max-w-xl">
-            <KickerPill Icon={VolleyballIcon}>Sportliches Highlight</KickerPill>
+            {aktiv ? (
+              <KickerPill Icon={VolleyballIcon} tint="moss">
+                Sportliches Highlight
+              </KickerPill>
+            ) : (
+              <KickerPill Icon={settings.regen_modus ? CloudRain : Megaphone} tint="sky">
+                {settings.regen_modus ? 'Wetter-Update' : 'Update der Orga'}
+              </KickerPill>
+            )}
             <h1 className="mt-4 font-display text-5xl text-graphite sm:text-6xl">Volleyball-Turnier</h1>
             <p className="mt-4 text-lg text-graphite-soft">
-              Die Jahrgänge 7–10 treten in der Turnhalle an — Gruppenphase mit Live-Tabellen, dann die Finalspiele.
+              {aktiv
+                ? 'Die Jahrgänge 7–10 treten in der Turnhalle an — Gruppenphase mit Live-Tabellen, dann die Finalspiele.'
+                : settings.regen_modus
+                  ? 'Die Jahrgänge 7–10 sollten in der Turnhalle antreten — doch das Wetter macht uns dieses Jahr einen Strich durch die Rechnung.'
+                  : 'Die Jahrgänge 7–10 sollten in der Turnhalle antreten — doch das Turnier muss dieses Jahr leider ausfallen.'}
             </p>
           </div>
         </section>
 
-        {live.length > 0 && (
+        {!aktiv && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: 'spring', stiffness: 110, damping: 18, delay: 0.1 }}
+            className="relative mt-10 overflow-hidden rounded-3xl bg-white p-7 shadow-card ring-1 ring-black/5 sm:p-9"
+          >
+            <VolleyballIcon className="pointer-events-none absolute -bottom-8 -right-6 h-44 w-44 text-graphite/[0.05]" aria-hidden />
+            <div className="relative z-10 max-w-2xl">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="grid h-12 w-12 place-items-center rounded-full bg-crimson-500/10 text-crimson-500">
+                  {settings.regen_modus ? <CloudRain className="h-6 w-6" /> : <Megaphone className="h-6 w-6" />}
+                </span>
+                <span className="rounded-full bg-crimson-500/10 px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-crimson-500 ring-1 ring-inset ring-crimson-500/15">
+                  Fällt aus
+                </span>
+              </div>
+              <h2 className="mt-5 font-display text-3xl text-graphite sm:text-4xl">Das Turnier kann leider nicht stattfinden</h2>
+              <p className="mt-3 leading-relaxed text-graphite-soft">
+                {settings.regen_modus
+                  ? 'Wegen des Regens ziehen Stationen in die Turnhalle um — damit ist für das Volleyball-Turnier kein Platz mehr. '
+                  : 'Das Turnier musste kurzfristig abgesagt werden. '}
+                Die Klassenwertung läuft ganz normal weiter: An den Stationen zählt jeder Punkt.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link
+                  to="/lageplan"
+                  className="inline-flex items-center gap-2 rounded-full bg-moss-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_34px_-12px_rgba(0,128,55,0.7)] transition hover:bg-moss-700"
+                >
+                  <MapPin className="h-4 w-4" /> Zum Lageplan
+                </Link>
+                <Link
+                  to="/rangliste"
+                  className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-graphite shadow-sm ring-1 ring-black/[0.08] transition hover:bg-paper-2"
+                >
+                  Zum Live-Scoreboard <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {aktiv && live.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -111,84 +196,93 @@ export default function Volleyball() {
           </motion.div>
         )}
 
-        <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {REGELN.map(({ Icon, title, desc }) => (
-            <div key={title} className="rounded-2xl bg-white p-4 text-center shadow-card ring-1 ring-black/5 max-sm:last:col-span-2">
-              <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-moss-600/10 text-moss-700">
-                <Icon className="h-[22px] w-[22px]" strokeWidth={1.8} />
-              </span>
-              <h3 className="mt-2.5 text-sm font-bold text-graphite">{title}</h3>
-              <p className="mt-0.5 text-xs leading-snug text-graphite-soft">{desc}</p>
-            </div>
-          ))}
-        </div>
-
-        {matches === null ? (
-          <div className="mt-12 grid place-items-center py-16">
-            <EmblemLoader />
+        {aktiv && (
+          <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {REGELN.map(({ Icon, title, desc }) => (
+              <div key={title} className="rounded-2xl bg-white p-4 text-center shadow-card ring-1 ring-black/5 max-sm:last:col-span-2">
+                <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-moss-600/10 text-moss-700">
+                  <Icon className="h-[22px] w-[22px]" strokeWidth={1.8} />
+                </span>
+                <h3 className="mt-2.5 text-sm font-bold text-graphite">{title}</h3>
+                <p className="mt-0.5 text-xs leading-snug text-graphite-soft">{desc}</p>
+              </div>
+            ))}
           </div>
-        ) : matches.length === 0 ? (
-          <div className="mt-12 rounded-3xl bg-white p-10 text-center text-graphite-soft shadow-card ring-1 ring-black/5">
-            Der Spielplan wird von der Orga noch erstellt.
-          </div>
-        ) : (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: [0.22, 0.61, 0.36, 1] }}>
-            {VOLLEY_SCHIENEN.map((s) => {
-              const finals = matches.filter((m) => m.phase === 'final' && m.schiene === s.schiene)
-              const [title, klassen] = s.label.split(' · ')
-              return (
-                <section key={s.schiene} className="mt-12">
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-moss-600/[0.08] p-3 ring-1 ring-moss-600/10 sm:p-4">
-                    <div className="flex items-center gap-3">
-                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-moss-600 text-white shadow-[0_8px_20px_-8px_rgba(0,128,55,0.85)]">
-                        <VolleyballIcon className="h-6 w-6" />
-                      </span>
-                      <div className="font-display text-2xl text-graphite sm:text-3xl">
-                        {title} {klassen && <span className="text-xl text-graphite-soft/70 sm:text-2xl">· {klassen}</span>}
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-moss-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_18px_-8px_rgba(0,128,55,0.85)]">
-                      <Clock className="h-4 w-4" /> {zeiten[s.schiene] ?? s.zeit}
-                    </span>
-                  </div>
-                  <div className="mt-5 grid gap-5 lg:grid-cols-3">
-                    {Object.entries(s.gruppen).map(([g, teams]) => {
-                      const gm = matches.filter((m) => m.phase === 'gruppe' && m.schiene === s.schiene && m.gruppe === g)
-                      return <GroupCard key={g} gruppe={g} teams={teams} matches={gm} />
-                    })}
-                    {finals.length > 0 && <FinalsColumn finals={finals} className="sm:col-span-2 lg:col-span-1" />}
-                  </div>
-                </section>
-              )
-            })}
-          </motion.div>
         )}
 
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="relative mt-12 flex items-center gap-4 overflow-hidden rounded-3xl bg-moss-600/[0.08] p-5 ring-1 ring-moss-600/10 sm:p-6"
-        >
-          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-moss-600 text-white shadow-[0_10px_24px_-10px_rgba(0,128,55,0.9)]">
-            <Users className="h-7 w-7" />
-          </span>
-          <div className="relative z-10">
-            <div className="label-mono text-[11px] uppercase tracking-[0.2em] text-moss-600">Highlight</div>
-            <div className="mt-0.5 font-display text-2xl text-graphite sm:text-3xl">Lehrkräfte vs. Jahrgang 11</div>
-            <div className="mt-0.5 text-graphite-soft">12:50 – 13:20 Uhr · Turnhalle — kommt zum Anfeuern vorbei!</div>
-          </div>
-          <VolleyballIcon className="pointer-events-none absolute -bottom-5 -right-4 h-32 w-32 text-moss-600/[0.08]" aria-hidden />
-        </motion.div>
+        {aktiv &&
+          (matches === null ? (
+            <div className="mt-12 grid place-items-center py-16">
+              <EmblemLoader />
+            </div>
+          ) : matches.length === 0 ? (
+            <div className="mt-12 rounded-3xl bg-white p-10 text-center text-graphite-soft shadow-card ring-1 ring-black/5">
+              Der Spielplan wird von der Orga noch erstellt.
+            </div>
+          ) : (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: [0.22, 0.61, 0.36, 1] }}>
+              {VOLLEY_SCHIENEN.map((s) => {
+                const finals = matches.filter((m) => m.phase === 'final' && m.schiene === s.schiene)
+                const [title, klassen] = s.label.split(' · ')
+                return (
+                  <section key={s.schiene} className="mt-12">
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-moss-600/[0.08] p-3 ring-1 ring-moss-600/10 sm:p-4">
+                      <div className="flex items-center gap-3">
+                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-moss-600 text-white shadow-[0_8px_20px_-8px_rgba(0,128,55,0.85)]">
+                          <VolleyballIcon className="h-6 w-6" />
+                        </span>
+                        <div className="font-display text-2xl text-graphite sm:text-3xl">
+                          {title} {klassen && <span className="text-xl text-graphite-soft/70 sm:text-2xl">· {klassen}</span>}
+                        </div>
+                      </div>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-moss-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_18px_-8px_rgba(0,128,55,0.85)]">
+                        <Clock className="h-4 w-4" /> {zeiten[s.schiene] ?? s.zeit}
+                      </span>
+                    </div>
+                    <div className="mt-5 grid gap-5 lg:grid-cols-3">
+                      {Object.entries(s.gruppen).map(([g, teams]) => {
+                        const gm = matches.filter((m) => m.phase === 'gruppe' && m.schiene === s.schiene && m.gruppe === g)
+                        return <GroupCard key={g} gruppe={g} teams={teams} matches={gm} />
+                      })}
+                      {finals.length > 0 && <FinalsColumn finals={finals} className="sm:col-span-2 lg:col-span-1" />}
+                    </div>
+                  </section>
+                )
+              })}
+            </motion.div>
+          ))}
+
+        {settings.lehrer_spiel_aktiv && (
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="relative mt-12 flex items-center gap-4 overflow-hidden rounded-3xl bg-moss-600/[0.08] p-5 ring-1 ring-moss-600/10 sm:p-6"
+          >
+            <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-moss-600 text-white shadow-[0_10px_24px_-10px_rgba(0,128,55,0.9)]">
+              <Users className="h-7 w-7" />
+            </span>
+            <div className="relative z-10">
+              <div className="label-mono text-[11px] uppercase tracking-[0.2em] text-moss-600">Highlight</div>
+              <div className="mt-0.5 font-display text-2xl text-graphite sm:text-3xl">Lehrkräfte vs. Jahrgang 11</div>
+              <div className="mt-0.5 text-graphite-soft">12:50 – 13:20 Uhr · Turnhalle — kommt zum Anfeuern vorbei!</div>
+            </div>
+            <VolleyballIcon className="pointer-events-none absolute -bottom-5 -right-4 h-32 w-32 text-moss-600/[0.08]" aria-hidden />
+          </motion.div>
+        )}
       </main>
       <SiteFooter />
     </div>
   )
 }
 
-function KickerPill({ Icon, children }: { Icon: typeof Trophy; children: React.ReactNode }) {
+function KickerPill({ Icon, tint, children }: { Icon: LucideIcon; tint: 'moss' | 'sky'; children: React.ReactNode }) {
+  const c =
+    tint === 'moss'
+      ? 'bg-moss-600/10 text-moss-700 ring-moss-600/15'
+      : 'bg-sky-500/10 text-sky-700 ring-sky-500/15'
   return (
-    <span className="inline-flex items-center gap-2 rounded-full bg-moss-600/10 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-moss-700 ring-1 ring-inset ring-moss-600/15">
+    <span className={cx('inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] ring-1 ring-inset', c)}>
       <Icon className="h-3.5 w-3.5" /> {children}
     </span>
   )

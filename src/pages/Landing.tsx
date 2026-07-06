@@ -3,26 +3,17 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLottie } from 'lottie-react'
 import rewardAnim from '@/assets/lottie/reward-light.json'
-import { ArrowRight, Cake, CalendarDays, ChevronRight, Clock, CupSoda, Flag, Flame, History, Info, Lock, MapPin, MessagesSquare, MonitorPlay, Sprout, TrendingUp, Trophy, Volleyball } from 'lucide-react'
+import { ArrowRight, Cake, CalendarDays, ChevronRight, Clock, CloudRain, CupSoda, Flag, Flame, History, Info, Lock, MapPin, MessagesSquare, MonitorPlay, Sprout, TrendingUp, Trophy, Volleyball } from 'lucide-react'
 import { SiteHeader } from '@/components/site/SiteHeader'
 import { SiteFooter } from '@/components/site/SiteFooter'
 import { useLiveData } from '@/lib/useLiveData'
-import { useScoreboardFrozen } from '@/lib/useSettings'
+import { useEventSettingsState } from '@/lib/useSettings'
+import { aktiverZeitplan } from '@/lib/zeitplan'
+import { fetchStationsPublic } from '@/lib/api'
 import { ScoreboardLocked } from '@/components/ScoreboardLocked'
 import { computeJahrgangWertung, cx, fmt } from '@/lib/format'
 import type { LeaderboardRow } from '@/lib/types'
 
-const ZEITPLAN = [
-  { time: '08:00', title: 'Treffen im Klassenraum', desc: 'Anwesenheit & Orga mit den Klassenlehrkräften.' },
-  { time: '08:15', title: 'Begrüßung in der Aula', desc: 'Offizieller Start für alle gemeinsam.' },
-  { time: '08:40', title: 'Stationen 1–5', desc: 'Je 15 Min. Action, dann 5 Min. Wechselzeit.' },
-  { time: '10:20', title: 'Große Frühstückspause', desc: 'Foodcourt im Foyer (30 Min.).' },
-  { time: '10:50', title: 'Stationen 6–10', desc: 'Weiter durch die Disziplinen.' },
-  { time: '12:30', title: 'Mittagspause & Grillen', desc: 'Auf dem Schulhof — dazu das Highlight: Lehrkräfte vs. Jahrgang 11.' },
-  { time: '13:20', title: 'Letzte Station', desc: 'Station 11 für alle Klassen.' },
-  { time: '13:40', title: 'Tanzshow', desc: 'Auftritt des WP-Kurses Tanz in der Aula.' },
-  { time: '14:00', title: 'Siegerehrung', desc: 'Großer Abschluss in der Aula — wer ist die beste Klasse?' },
-]
 const STATIONEN = [
   'Allgemeinwissen-Quiz',
   'Lehrkräfte-Quiz',
@@ -37,10 +28,10 @@ const STATIONEN = [
   'Fotos',
 ]
 const STATIONEN_VISIBLE = 6
-const VERPFLEGUNG = [
+const verpflegung = (regen: boolean) => [
   { Icon: Flame, title: 'Großes Grillen', desc: 'In der Mittagspause auf dem Schulhof' },
   { Icon: Cake, title: 'Foodcourt im Foyer', desc: 'Herzhaftes & Süßes vom Jahrgang 11' },
-  { Icon: CupSoda, title: 'Erfrischungen', desc: 'Kalte Getränke gegen die Sommerhitze' },
+  { Icon: CupSoda, title: 'Erfrischungen', desc: regen ? 'Kalte Getränke im Foyer unten' : 'Kalte Getränke gegen die Sommerhitze' },
 ]
 
 const inView = {
@@ -52,12 +43,29 @@ const inView = {
 
 export default function Landing() {
   const { leaderboard } = useLiveData({ realtime: false, pollMs: 8000 })
-  const frozen = useScoreboardFrozen()
+  const { settings, loaded } = useEventSettingsState()
+  const frozen = settings.scoreboard_frozen
   const podium = leaderboard.slice(0, 3)
   const jahrgang = computeJahrgangWertung(leaderboard)
   const [showAllStations, setShowAllStations] = useState(false)
   const [showAllZeit, setShowAllZeit] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
+  const [stationNames, setStationNames] = useState<string[]>(STATIONEN)
+
+  const zeitplan = aktiverZeitplan(settings)
+
+  useEffect(() => {
+    let alive = true
+    fetchStationsPublic()
+      .then((st) => {
+        const names = st.filter((s) => s.aktiv && s.pflicht && s.name !== 'Versorgung' && s.name !== 'Volleyball-Turnier').map((s) => s.name)
+        if (alive && names.length) setStationNames(names)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   useEffect(() => {
     if (searchParams.get('stationen') !== 'open') return
@@ -107,6 +115,18 @@ export default function Landing() {
               <History className="h-4 w-4 shrink-0 text-moss-600" /> <span className="min-w-0 break-words">Motto: Zeitreise — von der Steinzeit bis Cyberpunk</span>
             </span>
           </motion.div>
+          {loaded && settings.regen_modus && (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.44 }} className="mt-3 flex justify-center">
+              <Link
+                to="/lageplan"
+                className="inline-flex max-w-full items-center gap-2 rounded-full bg-sky-500/[0.12] px-4 py-2 text-center text-sm font-semibold text-sky-700 ring-1 ring-sky-500/25 transition hover:bg-sky-500/[0.18]"
+              >
+                <CloudRain className="h-4 w-4 shrink-0 text-sky-600" />
+                <span className="min-w-0 break-words">Regen-Update: Alle Stationen im Gebäude — zum Lageplan</span>
+                <ArrowRight className="h-3.5 w-3.5 shrink-0" />
+              </Link>
+            </motion.div>
+          )}
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.46 }} className="mt-9 flex flex-wrap items-center justify-center gap-3">
             <Link
               to="/rangliste"
@@ -172,12 +192,12 @@ export default function Landing() {
           <Eyebrow Icon={Clock} tint="moss">Ablauf</Eyebrow>
           <h3 className="mt-3 font-display text-3xl text-graphite">Zeitplan</h3>
           <ol className="mt-6 space-y-5">
-            {ZEITPLAN.slice(0, 4).map((z, i) => (
-              <ZeitItem key={z.time} z={z} connector={i < 3 || showAllZeit} />
+            {zeitplan.slice(0, 4).map((z, i) => (
+              <ZeitItem key={`${z.time}-${i}`} z={z} connector={i < Math.min(zeitplan.length, 4) - 1 || (showAllZeit && zeitplan.length > 4)} />
             ))}
           </ol>
           <AnimatePresence initial={false}>
-            {showAllZeit && (
+            {showAllZeit && zeitplan.length > 4 && (
               <motion.ol
                 key="zeit-more"
                 initial={{ height: 0, opacity: 0 }}
@@ -186,20 +206,22 @@ export default function Landing() {
                 transition={{ duration: 0.4, ease: [0.22, 0.61, 0.36, 1] }}
                 className="space-y-5 overflow-hidden pt-5"
               >
-                {ZEITPLAN.slice(4).map((z, i, arr) => (
-                  <ZeitItem key={z.time} z={z} connector={i < arr.length - 1} />
+                {zeitplan.slice(4).map((z, i, arr) => (
+                  <ZeitItem key={`${z.time}-${i}`} z={z} connector={i < arr.length - 1} />
                 ))}
               </motion.ol>
             )}
           </AnimatePresence>
           <p className="mt-5 text-sm font-medium text-graphite-soft">Viel Erfolg und Spaß beim Sammeln von Punkten!</p>
-          <button
-            onClick={() => setShowAllZeit((v) => !v)}
-            className="mt-4 inline-flex w-fit items-center gap-2 rounded-2xl bg-moss-600/10 px-4 py-2.5 text-sm font-semibold text-moss-700 transition hover:bg-moss-600/15"
-          >
-            <CalendarDays className="h-4 w-4" /> {showAllZeit ? 'Weniger anzeigen' : 'Kompletten Ablauf ansehen'}
-            <ChevronRight className={cx('h-4 w-4 transition-transform', showAllZeit && 'rotate-90')} />
-          </button>
+          {zeitplan.length > 4 && (
+            <button
+              onClick={() => setShowAllZeit((v) => !v)}
+              className="mt-4 inline-flex w-fit items-center gap-2 rounded-2xl bg-moss-600/10 px-4 py-2.5 text-sm font-semibold text-moss-700 transition hover:bg-moss-600/15"
+            >
+              <CalendarDays className="h-4 w-4" /> {showAllZeit ? 'Weniger anzeigen' : 'Kompletten Ablauf ansehen'}
+              <ChevronRight className={cx('h-4 w-4 transition-transform', showAllZeit && 'rotate-90')} />
+            </button>
+          )}
         </motion.div>
       </section>
 
@@ -208,10 +230,17 @@ export default function Landing() {
           <motion.div {...inView} className="flex items-start justify-between gap-6">
             <div className="max-w-2xl">
               <Kicker Icon={Flag}>Wettkampf</Kicker>
-              <h2 className="mt-4 font-display text-4xl text-graphite sm:text-5xl">11 Stationen — eine Siegerklasse</h2>
+              <h2 className="mt-4 font-display text-4xl text-graphite sm:text-5xl">{stationNames.length} Stationen — eine Siegerklasse</h2>
               <p className="mt-4 text-lg leading-relaxed text-graphite-soft">
-                Von Allgemeinwissen-Quiz über Pantomime bis Sackhüpfen: Ihr tretet als Klasse an 11 Stationen an und sammelt Punkte. Dazu das große
-                Volleyball-Turnier der Jahrgänge 7–10. Am Ende steht fest, wer die beste Klasse der ganzen Schule ist.
+                Von Allgemeinwissen-Quiz über Pantomime bis Sackhüpfen: Ihr tretet als Klasse an {stationNames.length} Stationen an und sammelt Punkte
+                {!loaded
+                  ? ''
+                  : settings.volleyball_aktiv
+                    ? '. Dazu das große Volleyball-Turnier der Jahrgänge 7–10'
+                    : settings.regen_modus
+                      ? ' — wegen des Regens komplett im Gebäude'
+                      : ''}
+                . Am Ende steht fest, wer die beste Klasse der ganzen Schule ist.
               </p>
             </div>
             <motion.img
@@ -224,14 +253,14 @@ export default function Landing() {
             />
           </motion.div>
           <motion.div {...inView} className="mt-8 flex flex-wrap items-center gap-3">
-            {STATIONEN.slice(0, STATIONEN_VISIBLE).map((s) => (
+            {stationNames.slice(0, STATIONEN_VISIBLE).map((s) => (
               <span key={s} className="rounded-full bg-paper px-4 py-2 text-sm font-medium text-graphite ring-1 ring-black/[0.06]">
                 {s}
               </span>
             ))}
             <AnimatePresence>
               {showAllStations &&
-                STATIONEN.slice(STATIONEN_VISIBLE).map((s) => (
+                stationNames.slice(STATIONEN_VISIBLE).map((s) => (
                   <motion.span
                     key={s}
                     initial={{ opacity: 0, scale: 0.85 }}
@@ -244,16 +273,31 @@ export default function Landing() {
                   </motion.span>
                 ))}
             </AnimatePresence>
-            <button
-              onClick={() => setShowAllStations((v) => !v)}
-              className="rounded-full bg-moss-600/10 px-4 py-2 text-sm font-semibold text-moss-700 transition hover:bg-moss-600/15"
-            >
-              {showAllStations ? 'Weniger anzeigen' : `+ ${STATIONEN.length - STATIONEN_VISIBLE} weitere`}
-            </button>
+            {stationNames.length > STATIONEN_VISIBLE && (
+              <button
+                onClick={() => setShowAllStations((v) => !v)}
+                className="rounded-full bg-moss-600/10 px-4 py-2 text-sm font-semibold text-moss-700 transition hover:bg-moss-600/15"
+              >
+                {showAllStations ? 'Weniger anzeigen' : `+ ${stationNames.length - STATIONEN_VISIBLE} weitere`}
+              </button>
+            )}
           </motion.div>
           <motion.div {...inView} className="mt-8 grid gap-4 sm:grid-cols-2">
             <NavCard to="/lageplan" Icon={MapPin} title="Wo finde ich was?" sub="Lageplan, Stationen & wichtige Orte" />
-            <NavCard to="/volleyball" Icon={Volleyball} title="Volleyball-Turnierplan" sub="Spielplan, Teams & Zahlen" />
+            <NavCard
+              to="/volleyball"
+              Icon={Volleyball}
+              title={loaded && settings.volleyball_aktiv ? 'Volleyball-Turnierplan' : 'Volleyball-Turnier'}
+              sub={
+                !loaded
+                  ? 'Alle Infos zum Turnier'
+                  : settings.volleyball_aktiv
+                    ? 'Spielplan, Teams & Zahlen'
+                    : settings.regen_modus
+                      ? 'Fällt wegen des Wetters leider aus'
+                      : 'Fällt heute leider aus'
+              }
+            />
           </motion.div>
         </div>
       </section>
@@ -280,7 +324,7 @@ export default function Landing() {
           />
         </motion.div>
         <div className="mt-10 grid gap-5 sm:grid-cols-3">
-          {VERPFLEGUNG.map(({ Icon, title, desc }) => (
+          {verpflegung(settings.regen_modus).map(({ Icon, title, desc }) => (
             <motion.div
               {...inView}
               key={title}
@@ -302,7 +346,7 @@ export default function Landing() {
             <h3 className="font-bold text-graphite">Gut zu wissen</h3>
             <p className="mt-1 text-sm leading-relaxed text-graphite-soft">
               Die Stände vom Jahrgang 11 sind kostenpflichtig — der Erlös finanziert den Abiball, die Cafeteria bleibt geschlossen. Bringt etwas Taschengeld mit
-              und denkt bei Sommerwetter an Sonnenschutz und genug zu trinken.
+              {settings.regen_modus ? ' — und bei dem angesagten Regen eine Jacke für die Wege über den Hof.' : ' und denkt bei Sommerwetter an Sonnenschutz und genug zu trinken.'}
             </p>
           </div>
         </motion.div>

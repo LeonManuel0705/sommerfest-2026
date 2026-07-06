@@ -16,6 +16,10 @@ export type StationPublic = {
   aktiv: boolean
   pflicht: boolean
   sort: number
+  nr?: string | null
+  ort_normal?: string | null
+  ort_regen?: string | null
+  draussen?: boolean | null
 }
 
 export type StationAdmin = StationPublic & {
@@ -26,8 +30,18 @@ export type StationAdmin = StationPublic & {
   start_pin_hash: string | null
 }
 
+export type HinweisLevel = 'info' | 'warn' | 'alert'
+
+export type ZeitplanEintrag = { time: string; title: string; desc: string }
+
 export type AppSettings = {
   scoreboard_frozen: boolean
+  regen_modus: boolean
+  volleyball_aktiv: boolean
+  lehrer_spiel_aktiv: boolean
+  hinweis_text: string | null
+  hinweis_level: HinweisLevel
+  zeitplan: ZeitplanEintrag[] | null
 }
 
 export type Score = {

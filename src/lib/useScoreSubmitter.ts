@@ -39,8 +39,6 @@ export function useScoreSubmitter(opts: {
     setStatus((prev) => ({ ...prev, [teamId]: s }))
 
   const flush = useCallback(async () => {
-    // Ohne PIN gar nicht erst senden — sonst produziert der 8s-Interval nach einem
-    // Idle-Logout (pin='') lauter „wrong_pin" und der rote Banner bleibt hängen.
     if (flushing.current || !navigator.onLine || !pin) return
     flushing.current = true
     try {
@@ -64,8 +62,6 @@ export function useScoreSubmitter(opts: {
             setOne(teamId, 'error')
             break
           } else if (res.error === 'locked') {
-            // Station kurzzeitig gesperrt (Brute-Force-Schutz) — Queue behalten,
-            // der nächste 8s-Flush versucht es automatisch wieder.
             setOne(teamId, 'queued')
             break
           } else {

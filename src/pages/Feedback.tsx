@@ -30,12 +30,11 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import checkAnim from '@/assets/lottie/check-green.json'
-import { AnimatedNumber } from '@/components/AnimatedNumber'
 import { ConfettiBurst } from '@/components/ConfettiBurst'
 import { InkBackground } from '@/components/InkBackground'
 import { SiteHeader } from '@/components/site/SiteHeader'
 import { SiteFooter } from '@/components/site/SiteFooter'
-import { fetchFeedbackCount, fetchStationsPublic, fetchTeams, submitFeedback } from '@/lib/api'
+import { fetchStationsPublic, fetchTeams, submitFeedback } from '@/lib/api'
 import type {
   FeedbackEssen,
   FeedbackLaenge,
@@ -47,13 +46,14 @@ import type {
   FeedbackWieder,
 } from '@/lib/types'
 import { cx } from '@/lib/format'
+import { useEventSettings } from '@/lib/useSettings'
 
 const RATING_WORDS = ['Schwach', 'Ging so', 'Okay', 'Stark', 'Legendär']
 const BAR_HEIGHTS = [34, 50, 66, 82, 98]
-const HIGHLIGHTS = [
+const highlightOptionen = (volley: boolean, lehrerSpiel: boolean) => [
   'Stationen',
-  'Volleyball-Turnier',
-  'Lehrkräfte vs. Jahrgang 11',
+  ...(volley ? ['Volleyball-Turnier'] : []),
+  ...(lehrerSpiel ? ['Lehrkräfte vs. Jahrgang 11'] : []),
   'Grillen & Foodcourt',
   'Tanzshow',
   'Zeitreise-Motto',
@@ -61,12 +61,12 @@ const HIGHLIGHTS = [
   'Stimmung',
   'Live-Scoreboard',
 ]
-const KRITIK = [
+const kritikOptionen = (regen: boolean) => [
   'Lange Wartezeiten',
   'Ablauf & Orga',
   'Stationen-Auswahl',
   'Essen & Preise',
-  'Hitze / zu wenig Schatten',
+  regen ? 'Regen-Umplanung' : 'Hitze / zu wenig Schatten',
   'Zu wenig Sitzplätze',
   'Lautstärke',
   'Sonstiges',
@@ -117,7 +117,6 @@ const STATIONEN_FALLBACK = [
   'Sackhüpfen',
   'Laufen',
   'Fotos',
-  'Volleyball-Turnier',
 ]
 
 type Accent = 'moss' | 'crimson' | 'brass' | 'electric'
@@ -282,8 +281,6 @@ function useDictation(onText: (text: string) => void) {
     rec.lang = 'de-DE'
     rec.interimResults = false
     rec.continuous = true
-    // iOS-Safari sendet finale Ergebnisse teils mit resultIndex 0 mehrfach — daher
-    // nur wirklich neue Ergebnis-Slots (ab lastFinal) übernehmen, sonst gibt's Dubletten.
     let lastFinal = 0
     rec.onresult = (e) => {
       const start = Math.max(e.resultIndex, lastFinal)
@@ -304,6 +301,7 @@ function useDictation(onText: (text: string) => void) {
 }
 
 export default function Feedback() {
+  const settings = useEventSettings()
   const [started, setStarted] = useState(false)
   const [answers, setAnswers] = useState<Answers>(EMPTY)
   const [i, setI] = useState(0)
@@ -316,7 +314,6 @@ export default function Feedback() {
   const [klassen, setKlassen] = useState<string[]>(KLASSEN_FALLBACK)
   const [stationen, setStationen] = useState<string[]>(STATIONEN_FALLBACK)
   const [notes, setNotes] = useState({ kritik: '', essenDetail: '', orgaDetail: '', websiteDetail: '' })
-  const [count, setCount] = useState<number | null>(null)
 
   useEffect(() => {
     fetchTeams()
@@ -328,13 +325,10 @@ export default function Feedback() {
         if (names.length) setStationen(names)
       })
       .catch(() => {})
-    fetchFeedbackCount()
-      .then(setCount)
-      .catch(() => {})
   }, [])
 
   const jg = jahrgangOf(answers.klasse)
-  const zeigVolley = answers.rolle === 'lehrkraft' || (answers.rolle === 'schueler' && (jg === null || (jg >= 7 && jg <= 10)))
+  const zeigVolley = settings.volleyball_aktiv && (answers.rolle === 'lehrkraft' || (answers.rolle === 'schueler' && (jg === null || (jg >= 7 && jg <= 10))))
   const mood = moodOf(answers)
 
   const steps = useMemo(() => {
@@ -353,7 +347,7 @@ export default function Feedback() {
     s.push('wieder', 'kommentar')
     return s
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [answers.rolle, answers.rating, answers.klasse, answers.essen, answers.orga, answers.website])
+  }, [answers.rolle, answers.rating, answers.klasse, answers.essen, answers.orga, answers.website, zeigVolley])
 
   const step = steps[Math.min(i, steps.length - 1)]
   const meta = STEP_META[step]
@@ -370,7 +364,6 @@ export default function Feedback() {
   }
   const goBack = () => {
     if (i === 0) return
-    // Ein noch laufendes Auto-Advance abbrechen, sonst springt es nach „Zurück" wieder vor.
     window.clearTimeout(advanceTimer.current)
     setDir(-1)
     setPending(null)
@@ -426,9 +419,6 @@ export default function Feedback() {
       if (!res.ok) throw new Error(res.error)
       setDone(true)
       setConfetti((k) => k + 1)
-      fetchFeedbackCount()
-        .then(setCount)
-        .catch(() => {})
     } catch {
       setError(true)
     } finally {
@@ -456,9 +446,9 @@ export default function Feedback() {
       <main className="relative mx-auto w-full max-w-xl flex-1 px-5 pb-16 pt-10 sm:pt-14">
         <AnimatePresence mode="wait">
           {done ? (
-            <DoneCard key="done" rating={answers.rating ?? 0} nr={count} onRestart={restart} />
+            <DoneCard key="done" rating={answers.rating ?? 0} onRestart={restart} />
           ) : !started ? (
-            <IntroCard key="intro" count={count} onStart={() => setStarted(true)} />
+            <IntroCard key="intro" onStart={() => setStarted(true)} />
           ) : (
             <motion.div key="wizard" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.3 }}>
               <div className="h-1.5 rounded-full bg-graphite/[0.06]" role="progressbar" aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={i + 1} aria-label="Fortschritt">
@@ -631,7 +621,7 @@ export default function Feedback() {
                             }
                           >
                             <ChipQuestion
-                              items={KRITIK}
+                              items={kritikOptionen(settings.regen_modus)}
                               active={answers.kritik}
                               accent="crimson"
                               onToggle={(k) => toggleIn('kritik', k)}
@@ -644,7 +634,12 @@ export default function Feedback() {
 
                         {step === 'highlights' && (
                           <StepShell title="Was war top?">
-                            <ChipGrid items={HIGHLIGHTS} active={answers.highlights} accent="moss" onToggle={(h) => toggleIn('highlights', h)} />
+                            <ChipGrid
+                              items={highlightOptionen(settings.volleyball_aktiv, settings.lehrer_spiel_aktiv)}
+                              active={answers.highlights}
+                              accent="moss"
+                              onToggle={(h) => toggleIn('highlights', h)}
+                            />
                             <NextButton onClick={goNext} skip={answers.highlights.length === 0} />
                           </StepShell>
                         )}
@@ -1086,7 +1081,7 @@ function AmbientBlobs() {
   )
 }
 
-function IntroCard({ count, onStart }: { count: number | null; onStart: () => void }) {
+function IntroCard({ onStart }: { onStart: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 18, scale: 0.98 }}
@@ -1136,19 +1131,6 @@ function IntroCard({ count, onStart }: { count: number | null; onStart: () => vo
         >
           Los geht&apos;s <ArrowRight className="h-4 w-4" />
         </motion.button>
-        {count !== null && count >= 5 && (
-          <motion.span
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="inline-flex items-center gap-2 text-sm font-bold text-moss-700"
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-moss-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-moss-500" />
-            </span>
-            Schon <AnimatedNumber value={count} /> Stimmen abgegeben
-          </motion.span>
-        )}
       </div>
     </motion.div>
   )
@@ -1390,7 +1372,7 @@ function BarRating({ value, onChange }: { value: number | null; onChange: (v: nu
   )
 }
 
-function DoneCard({ rating, nr, onRestart }: { rating: number; nr: number | null; onRestart: () => void }) {
+function DoneCard({ rating, onRestart }: { rating: number; onRestart: () => void }) {
   const { View } = useLottie({ animationData: checkAnim, autoplay: true, loop: false }, { width: 120, height: 120 })
   return (
     <motion.div
@@ -1401,16 +1383,6 @@ function DoneCard({ rating, nr, onRestart }: { rating: number; nr: number | null
     >
       <div className="h-[120px] w-[120px]">{View}</div>
       <h1 className="mt-2 font-display text-4xl text-graphite">Danke dir!</h1>
-      {nr !== null && nr > 0 && (
-        <motion.span
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.25 }}
-          className="mt-3 inline-flex items-center rounded-full bg-moss-600/10 px-4 py-1.5 text-sm font-bold text-moss-700"
-        >
-          Du bist Stimme Nr. {nr}
-        </motion.span>
-      )}
       <div className="mt-5 flex items-end gap-1.5" aria-label={`Deine Wertung: ${rating} von 5`}>
         {BAR_HEIGHTS.map((h, idx) => (
           <motion.span

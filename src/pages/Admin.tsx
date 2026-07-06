@@ -3,13 +3,14 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLottie } from 'lottie-react'
-import { Activity, Gauge, LayoutGrid, MessageSquareHeart, ScrollText, Target, Users, Volleyball } from 'lucide-react'
+import { Activity, CloudSun, Gauge, LayoutGrid, MessageSquareHeart, ScrollText, Target, Users, Volleyball } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { fetchScores, fetchStationsAdmin, fetchTeams, signOut, takeAdminPrefetch } from '@/lib/api'
 import type { Score, StationAdmin, Team } from '@/lib/types'
 import { Brand } from '@/components/Brand'
 import { Button, EmblemLoader } from '@/components/ui'
+import { PlanTab } from '@/components/admin/PlanTab'
 import { TeamsTab } from '@/components/admin/TeamsTab'
 import { StationsTab } from '@/components/admin/StationsTab'
 import { OverviewTab } from '@/components/admin/OverviewTab'
@@ -40,9 +41,10 @@ function AdminWatermark() {
   )
 }
 
-type Tab = 'overview' | 'status' | 'teams' | 'stations' | 'volley' | 'feedback' | 'audit' | 'system'
+type Tab = 'overview' | 'plan' | 'status' | 'teams' | 'stations' | 'volley' | 'feedback' | 'audit' | 'system'
 const TABS: Array<{ id: Tab; label: string; Icon: LucideIcon }> = [
   { id: 'overview', label: 'Übersicht', Icon: LayoutGrid },
+  { id: 'plan', label: 'Plan', Icon: CloudSun },
   { id: 'status', label: 'Status', Icon: Gauge },
   { id: 'teams', label: 'Klassen', Icon: Users },
   { id: 'stations', label: 'Stationen', Icon: Target },
@@ -63,14 +65,19 @@ export default function Admin() {
   const [scores, setScores] = useState<Score[]>([])
   const [dataLoading, setDataLoading] = useState(true)
 
-  const loadData = useCallback(async () => {
-    setDataLoading(true)
-    const prefetch = takeAdminPrefetch()
-    const [t, s, sc] = await (prefetch ?? Promise.all([fetchTeams(), fetchStationsAdmin(), fetchScores()]))
-    setTeams(t)
-    setStations(s)
-    setScores(sc)
-    setDataLoading(false)
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setDataLoading(true)
+    try {
+      const prefetch = takeAdminPrefetch()
+      const [t, s, sc] = await (prefetch ?? Promise.all([fetchTeams(), fetchStationsAdmin(), fetchScores()]))
+      setTeams(t)
+      setStations(s)
+      setScores(sc)
+    } catch {
+      // Daten der letzten erfolgreichen Ladung behalten; finally löst den Spinner
+    } finally {
+      setDataLoading(false)
+    }
   }, [])
 
   const reloadScores = useCallback(async () => {
@@ -139,6 +146,7 @@ export default function Admin() {
               scores={scores}
               loading={dataLoading}
               reload={loadData}
+              reloadSilent={() => loadData(true)}
               onLogout={() => setLoggingOut(true)}
             />
           </motion.div>
@@ -183,6 +191,7 @@ function AdminShell({
   scores,
   loading,
   reload,
+  reloadSilent,
   onLogout,
 }: {
   email: string
@@ -191,6 +200,7 @@ function AdminShell({
   scores: Score[]
   loading: boolean
   reload: () => void
+  reloadSilent: () => void
   onLogout: () => void
 }) {
   const [tab, setTab] = useState<Tab>('overview')
@@ -230,6 +240,8 @@ function AdminShell({
           </div>
         ) : tab === 'overview' ? (
           <OverviewTab teams={teams} stations={stations} scores={scores} reload={reload} />
+        ) : tab === 'plan' ? (
+          <PlanTab stations={stations} reloadSilent={reloadSilent} />
         ) : tab === 'status' ? (
           <StatusTab teams={teams} stations={stations} scores={scores} />
         ) : tab === 'teams' ? (

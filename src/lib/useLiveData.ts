@@ -64,8 +64,6 @@ export function useLiveData(opts?: { realtime?: boolean; pollMs?: number }) {
       const lb = await fetchLeaderboard()
       if (mounted.current) setState((s) => ({ ...s, polled: sortLb(lb), live: true, loading: false, error: null }))
     } catch (e) {
-      // Netz-Blip: bestehende Daten + Live-Status stehen lassen, nur beim allerersten
-      // Laden als Fehler/„nicht live" zeigen — sonst flackert die Live-Pille bei jedem Poll.
       if (mounted.current)
         setState((s) => (s.polled === null ? { ...s, loading: false, error: (e as Error).message, live: false } : s))
     }
@@ -104,17 +102,12 @@ export function useLiveData(opts?: { realtime?: boolean; pollMs?: number }) {
       .subscribe((status) => {
         if (!mounted.current) return
         setState((s) => ({ ...s, live: status === 'SUBSCRIBED' }))
-        // Beim ERSTEN SUBSCRIBED deckt schon der initiale loadAll() oben ab (kein
-        // Doppel-Load). Erst bei einem RE-Subscribe (Reconnect) neu laden — sonst
-        // fehlen Scores, die während der Trennung reinkamen (z.B. Beamer).
         if (status === 'SUBSCRIBED') {
           if (subscribedOnce) loadAll()
           subscribedOnce = true
         }
       })
 
-    // Sicherheitsnetz: Falls das WLAN den WebSocket kappt (Schul-WLAN/OctoGate),
-    // hält ein langsames Polling den Stand trotzdem aktuell.
     const safetyId = window.setInterval(loadAll, 30000)
     const onFocus = () => loadAll()
     window.addEventListener('focus', onFocus)

@@ -271,7 +271,7 @@ export function StationsTab({ stations, reload }: { stations: StationAdmin[]; re
         })}
       </div>
 
-      {printing && <StationQRSheet stations={items} origin={window.location.origin} />}
+      {printing && <StationQRSheet stations={items.filter((s) => s.aktiv)} origin={window.location.origin} />}
     </div>
   )
 }

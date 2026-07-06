@@ -1,14 +1,22 @@
 {
   "name": "Sommerfest 2026 · Ernst-Haeckel-Gymnasium",
   "short_name": "Sommerfest",
-  "description": "Live-Scoreboard, Zeitplan, Volleyball-Turnier und Feedback zum Sommerfest 2026.",
+  "description": "Live-Scoreboard, Zeitplan, Lageplan und Feedback zum Sommerfest 2026.",
   "lang": "de",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f8f9fa",
   "theme_color": "#008037",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }

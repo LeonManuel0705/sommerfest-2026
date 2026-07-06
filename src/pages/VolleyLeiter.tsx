@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { KeyRound, ShieldCheck } from 'lucide-react'
+import { CloudRain, KeyRound, ShieldCheck } from 'lucide-react'
 import { fetchVolleyMatches, fetchVolleySchienen, volleyLeaderSetMatch, volleyLeaderSetTeams, volleyLeaderSetZeit, volleyLogin } from '@/lib/api'
 import { computeFinalists, FINALS, VOLLEY_SCHIENEN, type VolleyMatch } from '@/lib/volley'
+import { useEventSettingsState } from '@/lib/useSettings'
 import { VolleyBoard, type VolleyMut } from '@/components/VolleyBoard'
 import { Button, EmblemLoader, Spinner, TextInput } from '@/components/ui'
 
 export default function VolleyLeiter() {
+  const { settings, loaded } = useEventSettingsState()
   const { token = '' } = useParams()
   const [pin, setPin] = useState<string>('')
   const [authed, setAuthed] = useState(false)
@@ -17,8 +19,6 @@ export default function VolleyLeiter() {
   const [zeiten, setZeiten] = useState<Record<number, string>>({})
 
   const load = useCallback(() => {
-    // Bei einem fehlgeschlagenen Poll den vorhandenen Spielplan behalten (nicht auf []
-    // zurücksetzen) — sonst blinkt bei jedem WLAN-Blip „kein Spielplan" auf.
     fetchVolleyMatches().then(setMatches).catch(() => setMatches((m) => m ?? []))
     fetchVolleySchienen().then(setZeiten).catch(() => {})
   }, [])
@@ -81,10 +81,39 @@ export default function VolleyLeiter() {
     setZeit: (schiene, zeit) => volleyLeaderSetZeit(token, pin, schiene, zeit).then(() => undefined),
   }
 
-  if (checking) {
+  if (checking || !loaded) {
     return (
       <div className="grid min-h-dvh place-items-center bg-paper">
         <EmblemLoader />
+      </div>
+    )
+  }
+
+  if (!settings.volleyball_aktiv) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-paper p-6">
+        <motion.div
+          initial={{ opacity: 0, y: 16, filter: 'blur(6px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.5, ease: [0.2, 0.7, 0.2, 1] }}
+          className="w-full max-w-md rounded-[28px] bg-white p-7 text-center shadow-card ring-1 ring-black/5"
+        >
+          <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-crimson-500/10 text-crimson-500">
+            <CloudRain className="h-7 w-7" />
+          </span>
+          <h1 className="mt-4 font-display text-3xl text-graphite">Turnier fällt aus</h1>
+          <p className="mt-2 text-sm leading-relaxed text-graphite-soft">
+            Das Volleyball-Turnier fällt {settings.regen_modus ? 'wegen des Wetters ' : ''}aus — hier gibt es nichts einzutragen.
+            {settings.lehrer_spiel_aktiv && ' Das Spiel Lehrkräfte vs. Jahrgang 11 (12:50–13:20 Uhr, Turnhalle) findet statt.'}
+          </p>
+          <p className="mt-2 text-xs text-graphite-soft">Sollte die Orga das Turnier wieder aktivieren, funktioniert dein Zugang hier sofort wieder.</p>
+          <Link
+            to="/"
+            className="mt-5 inline-flex items-center justify-center gap-2 rounded-full bg-moss-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_34px_-12px_rgba(0,128,55,0.7)] transition hover:bg-moss-700"
+          >
+            Zur Startseite
+          </Link>
+        </motion.div>
       </div>
     )
   }

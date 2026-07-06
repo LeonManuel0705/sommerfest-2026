@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion, useMotionValueEvent, useScroll } from 'framer-motion'
-import { Menu, ShieldCheck, X } from 'lucide-react'
+import { Megaphone, Menu, ShieldCheck, X } from 'lucide-react'
 import { cx } from '@/lib/format'
+import { useEventSettingsState } from '@/lib/useSettings'
+import type { HinweisLevel } from '@/lib/types'
 import { OrgaLoginModal } from './OrgaLogin'
 
 type NavItem = { label: string; to?: string; href?: string }
@@ -16,7 +18,15 @@ const NAV: NavItem[] = [
   { label: 'Feedback', to: '/feedback' },
 ]
 
+const HINWEIS_STYLE: Record<HinweisLevel, string> = {
+  info: 'border-sky-500/15 bg-sky-500/[0.08] text-sky-800',
+  warn: 'border-brass-400/25 bg-brass-400/[0.12] text-brass-500',
+  alert: 'border-crimson-500/15 bg-crimson-500/[0.08] text-crimson-600',
+}
+
 export function SiteHeader() {
+  const { settings, loaded } = useEventSettingsState()
+  const volleyAbgesagt = loaded && !settings.volleyball_aktiv
   const [loginOpen, setLoginOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [hidden, setHidden] = useState(false)
@@ -106,6 +116,11 @@ export function SiteHeader() {
             return item.to ? (
               <Link key={item.label} to={item.to} className={className}>
                 {item.label}
+                {item.label === 'Volleyball' && volleyAbgesagt && (
+                  <span className="ml-1.5 rounded-full bg-crimson-500/10 px-1.5 py-0.5 align-middle text-[9px] font-bold uppercase tracking-wider text-crimson-500">
+                    fällt aus
+                  </span>
+                )}
               </Link>
             ) : (
               <button key={item.label} onClick={goStationen} className={className}>
@@ -131,6 +146,26 @@ export function SiteHeader() {
           </button>
         </div>
       </div>
+
+      <AnimatePresence initial={false}>
+        {settings.hinweis_text && (
+          <motion.div
+            key="hinweis"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.22, 0.61, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+            <div className={cx('border-t px-5 py-2.5 text-center text-sm font-semibold', HINWEIS_STYLE[settings.hinweis_level])}>
+              <span className="inline-flex max-w-full items-start gap-2 text-left sm:items-center">
+                <Megaphone className="mt-0.5 h-4 w-4 shrink-0 sm:mt-0" />
+                <span className="min-w-0 break-words">{settings.hinweis_text}</span>
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {createPortal(
         <AnimatePresence>
@@ -184,7 +219,14 @@ export function SiteHeader() {
                                 : 'font-medium text-graphite-soft hover:bg-graphite/[0.04] hover:text-graphite',
                           )}
                         >
-                          <span>{item.label}</span>
+                          <span>
+                            {item.label}
+                            {item.label === 'Volleyball' && volleyAbgesagt && (
+                              <span className="ml-2 rounded-full bg-crimson-500/10 px-2 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wider text-crimson-500">
+                                fällt aus
+                              </span>
+                            )}
+                          </span>
                           {isPending ? (
                             <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
                           ) : active ? (

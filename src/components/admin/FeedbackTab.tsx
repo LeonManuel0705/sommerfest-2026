@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, Lightbulb, Printer, QrCode, RefreshCw, Trash2 } from 'lucide-react'
+import { Check, Download, Lightbulb, Printer, QrCode, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
 import { deleteFeedback, fetchFeedback } from '@/lib/api'
 import { exportFeedbackCSV } from '@/lib/exporters'
+import { buildKiExport, downloadKiExport } from '@/lib/kiExport'
+import { useEventSettings } from '@/lib/useSettings'
 import type { FeedbackEntry, FeedbackRolle } from '@/lib/types'
 import { Button, EmblemLoader, GlassCard } from '@/components/ui'
 import { FeedbackReportSheet } from '@/components/FeedbackReportSheet'
@@ -139,14 +141,28 @@ function BarRow({ label, value, max, tone = 'moss' }: { label: string; value: nu
 }
 
 export function FeedbackTab() {
+  const settings = useEventSettings()
   const [entries, setEntries] = useState<FeedbackEntry[] | null>(null)
   const [segment, setSegment] = useState<Segment>('alle')
+  const [kiCopied, setKiCopied] = useState(false)
 
   const load = () => {
     setEntries(null)
     fetchFeedback().then(setEntries).catch(() => setEntries([]))
   }
   useEffect(load, [])
+
+  const kiExport = async () => {
+    if (!entries?.length) return
+    const text = buildKiExport(entries, settings)
+    try {
+      await navigator.clipboard.writeText(text)
+      setKiCopied(true)
+      window.setTimeout(() => setKiCopied(false), 2500)
+    } catch {
+      downloadKiExport(text)
+    }
+  }
 
   const remove = async (id: string) => {
     if (!window.confirm('Diesen Eintrag löschen?')) return
@@ -203,6 +219,9 @@ export function FeedbackTab() {
           </a>
           {entries.length > 0 && (
             <>
+              <Button size="sm" variant="glass" onClick={kiExport} title="Alle Feedback-Daten als fertigen Analyse-Prompt kopieren — bei Claude oder ChatGPT einfügen">
+                {kiCopied ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />} {kiCopied ? 'Kopiert!' : 'KI-Export'}
+              </Button>
               <Button size="sm" variant="glass" onClick={() => exportFeedbackCSV(entries)}>
                 <Download className="h-4 w-4" /> CSV
               </Button>

@@ -1,32 +1,13 @@
 import { useEffect, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { motion } from 'framer-motion'
 import { GitBranch, Lock, Printer, Timer } from 'lucide-react'
-import { AnimatedNumber } from '@/components/AnimatedNumber'
 import { PrintPortal } from '@/components/PrintPortal'
-import { fetchFeedbackCount } from '@/lib/api'
 
 export default function FeedbackQR() {
   const [url, setUrl] = useState('')
-  const [count, setCount] = useState<number | null>(null)
 
   useEffect(() => {
     setUrl(`${window.location.origin}/feedback`)
-  }, [])
-
-  useEffect(() => {
-    let alive = true
-    const load = () => {
-      fetchFeedbackCount()
-        .then((n) => alive && setCount(n))
-        .catch(() => {})
-    }
-    load()
-    const t = window.setInterval(load, 8000)
-    return () => {
-      alive = false
-      window.clearInterval(t)
-    }
   }, [])
 
   return (
@@ -57,20 +38,6 @@ export default function FeedbackQR() {
             <Timer className="h-4 w-4 text-moss-600" /> 90 Sekunden
           </span>
         </div>
-
-        {count !== null && count > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-6 inline-flex items-center gap-2.5 rounded-full bg-moss-600/10 px-5 py-2.5 text-base font-bold text-moss-700"
-          >
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-moss-400 opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-moss-500" />
-            </span>
-            Schon <AnimatedNumber value={count} /> {count === 1 ? 'Stimme' : 'Stimmen'}
-          </motion.div>
-        )}
 
         <div className="mt-10">
           <button

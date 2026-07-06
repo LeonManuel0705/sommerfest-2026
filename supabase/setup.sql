@@ -1,6 +1,4 @@
-
 create extension if not exists pgcrypto;
-
 
 drop view  if exists leaderboard;
 drop view  if exists stations_public;
@@ -27,12 +25,16 @@ create table stations (
   icon            text default 'medal',
   gewicht         numeric not null default 1,
   einheit         text,
+  nr              text,
+  ort_normal      text,
+  ort_regen       text,
+  draussen        boolean not null default false,
   token           text not null unique default encode(gen_random_bytes(8), 'hex'),
   pin_hash        text,
-  pin             text,                              -- Klartext-PIN: NUR für Admins lesbar (RLS), nie in stations_public
-  start_pin       text,                              -- Start-PIN vom Orga-Team: nötig, um die Stations-PIN zu setzen/ändern
+  pin             text,                              -- Klartext, nur für Admins lesbar
+  start_pin       text,                              -- vom Orga-Team, zum Setzen der PIN
   start_pin_hash  text,
-  pin_fails       int not null default 0,            -- Fehlversuchs-Zähler fürs Lockout (Brute-Force-Schutz)
+  pin_fails       int not null default 0,
   locked_until    timestamptz,
   aktiv           boolean not null default true,
   pflicht         boolean not null default true,
@@ -79,7 +81,7 @@ create index idx_scores_station on scores(station_id);
 create index idx_audit_created  on audit_log(created_at desc);
 
 create view stations_public as
-  select id, name, beschreibung, icon, gewicht, einheit, aktiv, pflicht, sort from stations;
+  select id, name, beschreibung, icon, gewicht, einheit, aktiv, pflicht, sort, nr, ort_normal, ort_regen, draussen from stations;
 
 create view leaderboard as
   select
@@ -113,12 +115,6 @@ create policy audit_insert_admin on audit_log for insert with check (auth.uid() 
 grant select on stations_public to anon, authenticated;
 grant select on leaderboard     to anon, authenticated;
 
-
--- Brute-Force-Bremse: zählt FALSCHE PIN-Versuche, sperrt nach 10 für 60s. Nur
--- intern aufgerufen. Wichtig: Die aufrufenden Funktionen prüfen die PIN ZUERST —
--- eine korrekte PIN kommt immer durch (auch während einer Sperre), damit niemand
--- mit dem sichtbaren Token eine Station gezielt aussperren kann (DoS). Der Zähler
--- verfällt nach 10 Min. ohne neuen Fehlversuch, damit Tippfehler nicht kumulieren.
 create or replace function pin_attempt(p_station_id uuid, p_ok boolean)
 returns void language plpgsql security definer set search_path = public, extensions as $$
 declare v_fails int;
@@ -155,7 +151,6 @@ declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv;
   if not found then return jsonb_build_object('ok', false, 'error', 'station_not_found'); end if;
-  -- Korrekte PIN kommt IMMER durch (auch während einer Sperre) → kein DoS.
   if v.pin_hash is not null and p_pin is not null and crypt(p_pin, v.pin_hash) = v.pin_hash then
     perform pin_attempt(v.id, true);
   else
@@ -184,7 +179,6 @@ declare v stations; v_old numeric;
 begin
   select * into v from stations where token = p_token and aktiv;
   if not found then return jsonb_build_object('ok', false, 'error', 'station_not_found'); end if;
-  -- Korrekte PIN kommt IMMER durch (auch während einer Sperre) → kein DoS.
   if v.pin_hash is not null and p_pin is not null and crypt(p_pin, v.pin_hash) = v.pin_hash then
     perform pin_attempt(v.id, true);
   else
@@ -215,7 +209,6 @@ create or replace function set_station_pin(p_station_id uuid, p_pin text)
 returns jsonb language plpgsql security definer set search_path = public, extensions as $$
 begin
   if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'not_authenticated'); end if;
-  -- Admin-Reset hebt eine evtl. bestehende Sperre gleich mit auf.
   update stations set
     pin_hash     = case when p_pin is null or p_pin = '' then null else crypt(p_pin, gen_salt('bf')) end,
     pin          = case when p_pin is null or p_pin = '' then null else p_pin end,
@@ -241,7 +234,6 @@ declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv;
   if not found then return jsonb_build_object('ok', false, 'error', 'station_not_found'); end if;
-  -- Korrekte Start-PIN kommt IMMER durch (auch während einer Sperre) → kein DoS.
   if v.start_pin_hash is not null and p_start_pin is not null and crypt(btrim(p_start_pin), v.start_pin_hash) = v.start_pin_hash then
     if p_pin is null or length(btrim(p_pin)) < 4 then
       return jsonb_build_object('ok', false, 'error', 'too_short');
@@ -298,9 +290,15 @@ grant execute on function db_health() to authenticated;
 
 drop table if exists settings cascade;
 create table settings (
-  id                int primary key default 1,
-  scoreboard_frozen boolean not null default false,
-  updated_at        timestamptz default now(),
+  id                 int primary key default 1,
+  scoreboard_frozen  boolean not null default false,
+  regen_modus        boolean not null default true,
+  volleyball_aktiv   boolean not null default false,
+  lehrer_spiel_aktiv boolean not null default true,
+  hinweis_text       text,
+  hinweis_level      text not null default 'info',
+  zeitplan           jsonb,
+  updated_at         timestamptz default now(),
   constraint settings_singleton check (id = 1)
 );
 insert into settings (id) values (1);
@@ -309,6 +307,20 @@ create policy settings_select_all  on settings for select using (true);
 create policy settings_write_admin on settings for all
   using (auth.uid() is not null) with check (auth.uid() is not null);
 grant select on settings to anon, authenticated;
+
+-- Atomarer Not-Schalter: stellt Settings-Flag UND Station in einer Transaktion um
+create or replace function set_volleyball_aktiv(p_aktiv boolean)
+returns jsonb language plpgsql security definer set search_path = public, extensions as $$
+declare v_rows int;
+begin
+  if auth.uid() is null then return jsonb_build_object('ok', false, 'error', 'not_authenticated'); end if;
+  update settings set volleyball_aktiv = p_aktiv, updated_at = now() where id = 1;
+  update stations set aktiv = p_aktiv where name = 'Volleyball-Turnier';
+  get diagnostics v_rows = row_count;
+  return jsonb_build_object('ok', true, 'station_rows', v_rows);
+end; $$;
+revoke all on function set_volleyball_aktiv(boolean) from public;
+grant execute on function set_volleyball_aktiv(boolean) to authenticated;
 
 create table volley_matches (
   id         uuid primary key default gen_random_uuid(),
@@ -349,7 +361,6 @@ declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv and name = 'Volleyball-Turnier';
   if not found then return false; end if;
-  -- Korrekte PIN kommt IMMER durch (auch während einer Sperre) → kein DoS.
   if v.pin_hash is not null and p_pin is not null and crypt(p_pin, v.pin_hash) = v.pin_hash then
     perform pin_attempt(v.id, true);
     return true;
@@ -365,7 +376,6 @@ declare v stations;
 begin
   select * into v from stations where token = p_token and aktiv and name = 'Volleyball-Turnier';
   if not found then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
-  -- Korrekte PIN kommt IMMER durch (auch während einer Sperre) → kein DoS.
   if v.pin_hash is not null and p_pin is not null and crypt(p_pin, v.pin_hash) = v.pin_hash then
     perform pin_attempt(v.id, true);
     return jsonb_build_object('ok', true, 'name', v.name);
@@ -549,24 +559,28 @@ insert into teams (name, jahrgang, farbe, sort) values
   ('10a', 10, '#6366f1', 101), ('10b', 10, '#6366f1', 102), ('10c', 10, '#6366f1', 103), ('10d', 10, '#6366f1', 104), ('10s', 10, '#6366f1', 105)
 on conflict (name) do nothing;
 
-insert into stations (name, beschreibung, icon, gewicht, einheit, pin_hash, sort) values
-  ('Allgemeinwissen-Quiz', 'Quizfragen aus allen Bereichen',     'zap',        1, 'Punkte', null, 1),
-  ('Lehrkräfte-Quiz',      'Wie gut kennt ihr eure Lehrkräfte?', 'medal',      1, 'Punkte', null, 2),
-  ('Hobbyhorsing',         'Parcours auf dem Steckenpferd',      'wind',       1, 'Punkte', null, 3),
-  ('Wasserpong',           'Treffer im Becher zählen',           'waves',      1, 'Punkte', null, 4),
-  ('Just Dance',           'Tanz-Challenge nach Punkten',        'flame',      1, 'Punkte', null, 5),
-  ('Bobbycar-Racing',      'Rennen auf Zeit',                    'bike',       1, 'Punkte', null, 6),
-  ('Stadt, Land, Fluss',   'Begriffe pro Runde',                 'flag',       1, 'Punkte', null, 7),
-  ('Pantomime',            'Begriffe vorspielen & erraten',      'sparkles',   1, 'Punkte', null, 8),
-  ('Sackhüpfen',           'Staffel im Sack',                    'rabbit',     1, 'Punkte', null, 9),
-  ('Laufen',               'Lauf-Wettbewerb',                    'footprints', 1, 'Punkte', null, 10),
-  ('Fotos',                'Kreativste Klassen-Fotos',           'target',     1, 'Punkte', null, 11),
-  ('Volleyball-Turnier',   'Großes Finale in der Halle',         'goal',       1, 'Punkte', null, 12)
+insert into stations (name, beschreibung, icon, gewicht, einheit, pin_hash, sort, nr, ort_normal, ort_regen, draussen) values
+  ('Allgemeinwissen-Quiz', 'Quizfragen aus allen Bereichen',     'zap',        1, 'Punkte', null, 1,  '1 & 11',  'Raum 032 (EG) & 110 (1. OG)',       'Raum 032 (EG) & 110 (1. OG)', false),
+  ('Lehrkräfte-Quiz',      'Wie gut kennt ihr eure Lehrkräfte?', 'medal',      1, 'Punkte', null, 2,  '2 & 12',  'Raum 108 (1. OG) & 031 (EG)',       'Raum 108 (1. OG) & 031 (EG)', false),
+  ('Hobbyhorsing',         'Parcours auf dem Steckenpferd',      'wind',       1, 'Punkte', null, 3,  '3 & 13',  'Basketballplatz / unter der Eiche', 'Turnhalle',                   true),
+  ('Wasserpong',           'Treffer im Becher zählen',           'waves',      1, 'Punkte', null, 4,  '4 & 14',  'Raum 135 & 136 (1. OG)',            'Raum 135 & 136 (1. OG)',      false),
+  ('Just Dance',           'Tanz-Challenge nach Punkten',        'flame',      1, 'Punkte', null, 5,  '5 & 15',  'Raum 137 & 138 (1. OG)',            'Raum 137 & 138 (1. OG)',      false),
+  ('Bobbycar-Racing',      'Rennen auf Zeit',                    'bike',       1, 'Punkte', null, 6,  '6 & 16',  '100-m-Bahn',                        'Foyer',                       true),
+  ('Stadt, Land, Fluss',   'Begriffe pro Runde',                 'flag',       1, 'Punkte', null, 7,  '7 & 17',  'Raum 107 & 109 (1. OG)',            'Raum 107 & 109 (1. OG)',      false),
+  ('Pantomime',            'Begriffe vorspielen & erraten',      'sparkles',   1, 'Punkte', null, 8,  '8 & 18',  'Raum 034 & 035 (EG)',               'Raum 034 & 035 (EG)',         false),
+  ('Sackhüpfen',           'Staffel im Sack',                    'rabbit',     1, 'Punkte', null, 9,  '9 & 19',  'Zwischen Turnhalle & 030er-Räumen', 'Aula',                        true),
+  ('Laufen',               'Lauf-Wettbewerb',                    'footprints', 1, 'Punkte', null, 10, '10 & 20', 'Fußballfeld',                       'Turnhalle',                   true),
+  ('Fotos',                'Kreativste Klassen-Fotos',           'target',     1, 'Punkte', null, 11, '21 & 22', 'Aula',                              'Aula',                        false),
+  ('Volleyball-Turnier',   'Großes Finale in der Halle',         'goal',       1, 'Punkte', null, 12, null,      'Turnhalle',                         'Turnhalle',                   false)
 on conflict (name) do nothing;
 
 insert into stations (name, beschreibung, icon, gewicht, einheit, pflicht, pin_hash, sort) values
   ('Versorgung', 'Essen & Trinken — freiwillige Bonuspunkte', 'utensils', 1, 'Punkte', false, null, 13)
 on conflict (name) do nothing;
+
+-- Volleyball-Station an den Plan-Schalter koppeln (Startzustand: volleyball_aktiv = false)
+update stations set aktiv = (select volleyball_aktiv from settings where id = 1)
+where name = 'Volleyball-Turnier';
 
 insert into volley_matches (schiene, gruppe, team_a, team_b, status, phase, platz, sort) values
   (1, 'A', '7a', '7c', 'geplant', 'gruppe', null, 0),

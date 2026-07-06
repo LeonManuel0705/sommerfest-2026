@@ -1,14 +1,3 @@
--- ============================================================================
---  FEEDBACK-MODUL · NACHTRÄGLICH EINSPIELBAR
---  Im Supabase SQL-Editor einfügen und einmal auf "Run" klicken.
---
---  ✅ Rein additiv & idempotent — löscht KEINE vorhandenen Punkte/Daten
---     und kann daher auch nach dem Start des Events noch laufen.
---     Auch sicher, falls eine ältere Version des Feedback-Moduls schon läuft
---     (fehlende Spalten werden ergänzt, alte Funktionen ersetzt).
---  (Für frische Setups ist derselbe Block bereits in setup.sql enthalten.)
--- ============================================================================
-
 create table if not exists feedback (
   id             uuid primary key default gen_random_uuid(),
   rolle          text,
@@ -54,13 +43,10 @@ create policy feedback_select_admin on feedback for select using (auth.uid() is 
 drop policy if exists feedback_delete_admin on feedback;
 create policy feedback_delete_admin on feedback for delete using (auth.uid() is not null);
 
--- Alte Signaturen aus früheren Versionen des Moduls entfernen (falls vorhanden).
 drop function if exists submit_feedback(int, text[], text);
 drop function if exists submit_feedback(int, text, text, text[], text[], text, text);
 drop function if exists submit_feedback(int, text, text, text, text[], text[], text, text, text, text, text, text, text);
 
--- Abgabe läuft NUR über dieses RPC (kein direkter Insert für anon):
--- alle Felder werden serverseitig gegen Whitelists geprüft bzw. gekürzt.
 create or replace function submit_feedback(
   p_rating int,
   p_rolle text default null,
@@ -137,13 +123,9 @@ end; $$;
 revoke all on function submit_feedback(int, text, text, text, text[], text[], text, text, text[], text, text, text[], text, text, text[], text, text) from public;
 grant execute on function submit_feedback(int, text, text, text, text[], text[], text, text, text[], text, text, text[], text, text, text[], text, text) to anon, authenticated;
 
--- Öffentlicher Stimmen-Zähler (nur die Anzahl, keine Inhalte) — für
--- Social Proof auf der Feedback-Seite und den Live-Zähler auf dem QR-Plakat.
 create or replace function feedback_count()
 returns int language sql security definer set search_path = public as $$
   select count(*)::int from feedback;
 $$;
 revoke all on function feedback_count() from public;
 grant execute on function feedback_count() to anon, authenticated;
-
--- Fertig! ✅  Du solltest unten "Success. No rows returned" sehen.

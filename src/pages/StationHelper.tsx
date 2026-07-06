@@ -533,8 +533,6 @@ function ScoreEditor({
   const value = valid ? parsed : 0
   const bump = (d: number) => setRaw(String(Math.max(0, Math.round((value + d) * 100) / 100)))
   const save = () => {
-    // Leeres/ungültiges Feld nicht als 0 speichern — sonst überschreibt ein
-    // versehentlich geleertes Feld den echten Punktestand mit 0.
     if (!valid) return
     setSaved(true)
     window.setTimeout(() => onSave(value), 900)

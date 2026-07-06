@@ -21,9 +21,6 @@ export function VolleyBoard({ matches, reload, mut, zeiten }: { matches: VolleyM
   const [local, setLocal] = useState<VolleyMatch[]>(matches)
   const [localZeit, setLocalZeit] = useState<Record<number, string>>(zeiten)
   const [busy, setBusy] = useState(false)
-  // Während aktiv getippt wird oder ein Speichern unterwegs ist, darf der 5-Sekunden-Poll
-  // den lokalen Stand NICHT überschreiben — sonst gehen Eingaben verloren oder ein stale
-  // Wert wird zurückgeschrieben (löscht z.B. den gerade eingetragenen Satz).
   const focusRef = useRef(false)
   const inflightRef = useRef(0)
   useEffect(() => {
